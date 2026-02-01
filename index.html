@@ -2,47 +2,86 @@
 <html lang="he">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Voting App</title>
 
 <style>
-body { font-family: Arial; direction: rtl; margin: 20px; }
-.grid { display: grid; grid-template-columns: repeat(auto-fill,120px); gap: 15px; }
-.card { border: 2px solid #ccc; padding: 10px; text-align: center; cursor: pointer; }
-.card.selected { background: lightgreen; }
-img { width: 70px; height: 70px; border-radius: 50%; object-fit: cover; }
-.admin { background: #eee; padding: 10px; margin-bottom: 15px; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; direction: rtl; margin: 20px; background-color: #f9f9f9; }
+  
+  /* Layout */
+  .container { max-width: 800px; margin: 0 auto; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 15px; margin-top: 20px;}
+  
+  /* Cards */
+  .card { 
+    background: white; border: 1px solid #ddd; border-radius: 8px; 
+    padding: 15px; text-align: center; cursor: pointer; 
+    transition: transform 0.2s, box-shadow 0.2s;
+    position: relative;
+  }
+  .card:hover { transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+  .card.selected { border: 2px solid #4CAF50; background-color: #e8f5e9; }
+  
+  /* Images */
+  img { width: 80px; height: 80px; border-radius: 50%; object-fit: cover; background: #eee; margin-bottom: 10px; }
+  
+  /* Admin Panel */
+  .admin { background: #fff; border: 1px solid #ccc; padding: 20px; margin-bottom: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+  .stats-box { background: #eef; padding: 10px; margin-top: 10px; border-radius: 5px; font-size: 0.9em; }
+  
+  /* Inputs & Buttons */
+  input { padding: 8px; border: 1px solid #ccc; border-radius: 4px; margin: 5px 0; width: 60%; }
+  button { padding: 10px 20px; cursor: pointer; border: none; border-radius: 4px; background: #007bff; color: white; margin: 5px; font-size: 16px;}
+  button:hover { background: #0056b3; }
+  button.danger { background: #dc3545; }
+  button.danger:hover { background: #a71d2a; }
+
+  /* Utility */
+  .hidden { display: none !important; }
+  .badge { background: #007bff; color: white; padding: 2px 6px; border-radius: 10px; font-size: 0.8em; }
 </style>
 </head>
 
 <body>
 
-<h2 id="title">התחברות</h2>
+<div class="container">
+  <h2 id="title">מערכת הצבעות</h2>
 
-<div id="login">
-  <button onclick="login('user')">משתמש</button>
-  <button onclick="login('admin')">מנהל</button>
-</div>
-
-<div id="app" style="display:none">
-  <div id="adminPanel" class="admin" style="display:none">
-    <h3>פאנל מנהל</h3>
-    שם: <input id="nameInput">
-    תמונה (URL): <input id="imgInput">
-    <button onclick="addPerson()">הוסף</button>
-    <button onclick="resetDB()">ריקון כל הנתונים</button>
-    <p>נוכחים: <span id="presenceCount">0</span></p>
+  <div id="loginSection">
+    <button onclick="window.login('user')">כניסת מצביע</button>
+    <button onclick="window.login('admin')">כניסת מנהל</button>
   </div>
 
-  <div class="grid" id="grid"></div>
+  <div id="appSection" class="hidden">
+    
+    <div id="adminPanel" class="admin hidden">
+      <h3>🛠 פאנל מנהל</h3>
+      <div>
+        <input id="nameInput" placeholder="שם המועמד">
+        <input id="imgInput" placeholder="קישור לתמונה (אופציונלי)">
+        <button onclick="window.addPerson()">הוסף מועמד</button>
+      </div>
+      
+      <div class="stats-box">
+        <p>👥 משתמשים מחוברים כעת: <b id="presenceCount">0</b></p>
+        <p>🔥 מועמדים עם יותר מהצבעה אחת: <b id="popularCount">0</b></p>
+      </div>
+
+      <div style="margin-top: 15px; border-top: 1px solid #eee; padding-top: 10px;">
+        <button class="danger" onclick="window.resetDB()">⚠ איפוס מערכת (מחק הכל)</button>
+      </div>
+    </div>
+
+    <div class="grid" id="grid"></div>
+  </div>
 </div>
 
 <script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.8.0/firebase-app.js";
-  import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.8.0/firebase-analytics.js";
-  import { getDatabase, ref, push, set, onValue } from "https://www.gstatic.com/firebasejs/12.8.0/firebase-database.js";
-  import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.8.0/firebase-auth.js";
+  // ✅ Fixed Imports to a stable version (10.7.1)
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+  import { getDatabase, ref, push, set, onValue, remove } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+  import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
-  // 🔥 Firebase שלך
   const firebaseConfig = {
     apiKey: "AIzaSyCqJpALniocZnIiA-tsHd6VHp1sODOBMjU",
     authDomain: "mazal-63e38.firebaseapp.com",
@@ -55,96 +94,158 @@ img { width: 70px; height: 70px; border-radius: 50%; object-fit: cover; }
   };
 
   const app = initializeApp(firebaseConfig);
-  getAnalytics(app);
-
   const db = getDatabase(app);
   const auth = getAuth(app);
 
   let userId = null;
-  let role = null;
+  let userRole = null;
+  let currentVote = null; // Track local vote
   const ADMIN_PASSWORD = "1234";
 
-  signInAnonymously(auth);
+  // Elements
+  const loginSection = document.getElementById("loginSection");
+  const appSection = document.getElementById("appSection");
+  const adminPanel = document.getElementById("adminPanel");
+  const title = document.getElementById("title");
+  const grid = document.getElementById("grid");
+  const nameInput = document.getElementById("nameInput");
+  const imgInput = document.getElementById("imgInput");
+  const presenceCount = document.getElementById("presenceCount");
+  const popularCount = document.getElementById("popularCount");
 
+  // Auth
+  signInAnonymously(auth);
   onAuthStateChanged(auth, user => {
-    if (user) userId = user.uid;
+    if (user) {
+      userId = user.uid;
+      updatePresence();
+    }
   });
+
+  // --- Global Functions (Attached to window) ---
 
   window.login = function(type) {
     if (type === "admin") {
-      if (prompt("סיסמת מנהל") !== ADMIN_PASSWORD) {
-        alert("שגוי");
+      const pass = prompt("הכנס סיסמת מנהל (1234):");
+      if (pass !== ADMIN_PASSWORD) {
+        alert("סיסמה שגויה");
         return;
       }
-      adminPanel.style.display = "block";
+      adminPanel.classList.remove("hidden");
     }
-    role = type;
-    login.style.display = "none";
-    app.style.display = "block";
-    title.innerText = "שלום " + role;
-    updatePresence();
-    listen();
+    
+    userRole = type;
+    loginSection.classList.add("hidden");
+    appSection.classList.remove("hidden");
+    title.innerText = type === "admin" ? "ממשק ניהול" : "בחירת מועמדים";
+    
+    listenToData();
   };
 
   window.addPerson = function() {
-    if (!nameInput.value) return;
+    if (!nameInput.value) return alert("חובה להזין שם");
+    
+    // Default placeholder image if empty
+    const imgUrl = imgInput.value.trim() || "https://ui-avatars.com/api/?background=random&name=" + nameInput.value;
+
     push(ref(db, "people"), {
       name: nameInput.value,
-      img: imgInput.value
+      img: imgUrl
     });
+    
     nameInput.value = "";
     imgInput.value = "";
   };
 
-  window.vote = function(id) {
-    if (role !== "user") return;
-    set(ref(db, "votes/" + userId), id);
+  window.resetDB = function() {
+    if (confirm("האם אתה בטוח שברצונך למחוק את כל המשתתפים וההצבעות?")) {
+      set(ref(db), {}); // Clears everything
+      alert("הנתונים אופסו");
+    }
   };
 
-  window.resetDB = function() {
-    if (!confirm("למחוק הכל?")) return;
-    set(ref(db), {});
+  window.toggleVote = function(personId) {
+    if (userRole !== "user") return;
+
+    // Toggle logic: If clicking the same person, remove vote. Else, set new vote.
+    if (currentVote === personId) {
+      set(ref(db, "votes/" + userId), null);
+    } else {
+      set(ref(db, "votes/" + userId), personId);
+    }
   };
+
+  // --- Logic ---
 
   function updatePresence() {
-    set(ref(db, "presence/" + userId), Date.now());
+    if(!userId) return;
+    const presenceRef = ref(db, "presence/" + userId);
+    set(presenceRef, Date.now());
+    
+    // Ping every 10 seconds
     setInterval(() => {
-      set(ref(db, "presence/" + userId), Date.now());
+      set(presenceRef, Date.now());
     }, 10000);
   }
 
-  function listen() {
-    onValue(ref(db, "people"), snap => {
-      const people = snap.val() || {};
-      onValue(ref(db, "votes"), vSnap => {
-        render(people, vSnap.val() || {});
-      });
-    });
+  function listenToData() {
+    // Listen to People and Votes simultaneously
+    onValue(ref(db), (snapshot) => {
+      const data = snapshot.val() || {};
+      const people = data.people || {};
+      const votes = data.votes || {};
+      const presence = data.presence || {};
 
-    onValue(ref(db, "presence"), snap => {
-      const now = Date.now();
-      const active = Object.values(snap.val() || {})
-        .filter(t => now - t < 30000).length;
-      presenceCount.innerText = active;
+      renderGrid(people, votes);
+      updateAdminStats(presence, votes, people);
     });
   }
 
-  function render(people, votes) {
+  function renderGrid(people, votes) {
     grid.innerHTML = "";
-    Object.entries(people).forEach(([id, p]) => {
-      const count = Object.values(votes).filter(v => v === id).length;
+    currentVote = votes[userId] || null;
+
+    Object.entries(people).forEach(([id, person]) => {
+      // Calculate votes for this person
+      const voteCount = Object.values(votes).filter(vId => vId === id).length;
+      const isSelected = (currentVote === id);
+
       const div = document.createElement("div");
-      div.className = "card";
-      if (votes[userId] === id) div.classList.add("selected");
-      div.onclick = () => vote(id);
+      div.className = `card ${isSelected ? "selected" : ""}`;
+      div.onclick = () => window.toggleVote(id);
+
       div.innerHTML = `
-        <img src="${p.img || ''}">
-        <div>${p.name}</div>
-        ${role === "admin" ? `<small>הצבעות: ${count}</small>` : ""}
+        <img src="${person.img}" onerror="this.src='https://via.placeholder.com/80?text=?'">
+        <div style="font-weight:bold">${person.name}</div>
+        ${userRole === "admin" 
+          ? `<div style="margin-top:5px; color:#555">הצבעות: <span class="badge">${voteCount}</span></div>` 
+          : "" 
+        }
       `;
       grid.appendChild(div);
     });
   }
+
+  function updateAdminStats(presence, votes, people) {
+    if (userRole !== "admin") return;
+
+    // 1. Active Users (Last 30 seconds)
+    const now = Date.now();
+    const activeCount = Object.values(presence).filter(ts => now - ts < 30000).length;
+    presenceCount.innerText = activeCount;
+
+    // 2. Candidates with > 1 vote
+    // Count votes per person ID first
+    const voteCounts = {};
+    Object.values(votes).forEach(votedId => {
+      voteCounts[votedId] = (voteCounts[votedId] || 0) + 1;
+    });
+
+    // Filter how many have > 1
+    const popular = Object.values(voteCounts).filter(count => count > 1).length;
+    popularCount.innerText = popular;
+  }
+
 </script>
 
 </body>
