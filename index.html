@@ -3,62 +3,50 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Voting App - Multi-Vote</title>
+<title>Voting & Presence App</title>
 <style>
-  body { font-family: 'Segoe UI', sans-serif; direction: rtl; margin: 0; background: #f0f2f5; padding-bottom: 120px; }
-  .container { max-width: 500px; margin: 0 auto; padding: 15px; }
-  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; margin-top: 15px; }
+  body { font-family: 'Segoe UI', sans-serif; direction: rtl; margin: 0; background: #f8f9fa; user-select: none; }
+  .header { display: flex; justify-content: space-between; align-items: center; padding: 15px; background: white; box-shadow: 0 2px 5px rgba(0,0,0,0.1); sticky: top; }
+  .container { padding: 15px; max-width: 600px; margin: 0 auto; }
   
+  /* Grid & Cards */
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 12px; }
   .card { 
-    background: white; border-radius: 12px; padding: 10px; text-align: center; 
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1); cursor: pointer; position: relative; border: 3px solid transparent;
+    background: white; border-radius: 15px; padding: 12px; text-align: center; 
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06); cursor: pointer; position: relative; border: 3px solid transparent;
+    transition: transform 0.1s;
   }
+  .card:active { transform: scale(0.96); }
   .card.selected { border-color: #28a745; background: #f0fff4; }
-  .card img { width: 80px; height: 80px; border-radius: 50%; object-fit: cover; background: #ddd; }
+  .card img { width: 70px; height: 70px; border-radius: 50%; object-fit: cover; background: #eee; }
   
-  .admin-tools { position: absolute; top: 5px; left: 5px; display: flex; gap: 5px; }
-  .btn-small { background: rgba(0,0,0,0.6); color: white; border: none; border-radius: 4px; padding: 4px 6px; font-size: 12px; cursor: pointer; }
+  /* Admin Extension Styles */
+  .plus-card { border: 2px dashed #007bff; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #007bff; min-height: 130px; }
+  .admin-badge { position: absolute; top: 5px; right: 5px; background: #ffc107; font-size: 10px; padding: 2px 5px; border-radius: 5px; }
+  .edit-trigger { background: #007bff; color: white; border: none; border-radius: 4px; padding: 3px 8px; font-size: 11px; margin-top: 5px; }
 
-  .panel { background: white; padding: 15px; border-radius: 10px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
-  .stats-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; font-weight: bold; }
-  
-  button { width: 100%; padding: 12px; margin-top: 8px; border: none; border-radius: 6px; cursor: pointer; background: #007bff; color: white; font-size: 16px; }
-  input { width: 100%; padding: 10px; margin-top: 5px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; }
-  
-  #log { position: fixed; bottom: 0; left: 0; right: 0; height: 80px; background: #222; color: #0f0; font-family: monospace; font-size: 10px; overflow-y: auto; padding: 8px; z-index: 1000; text-align: left; direction: ltr; }
+  /* Utilities */
   .hidden { display: none !important; }
+  button { cursor: pointer; }
+  #log { position: fixed; bottom: 0; left: 0; right: 0; height: 60px; background: #222; color: #0f0; font-family: monospace; font-size: 10px; overflow-y: auto; padding: 5px; z-index: 1000; opacity: 0.8; }
 </style>
 </head>
 <body>
 
-<div class="container">
-  <h2 id="viewTitle" style="text-align:center">כניסה למערכת</h2>
-
-  <div id="loginView">
-    <button onclick="login('user')">כניסת מצביע</button>
-    <button style="background:#6c757d" onclick="login('admin')">כניסת מנהל</button>
-  </div>
-
-  <div id="appView" class="hidden">
-    <div id="adminPanel" class="panel hidden">
-      <div class="stats-header">
-        <span>נוכחות (עם הצבעה): <span id="presenceText">0/0</span></span>
-      </div>
-      <input id="nameIn" placeholder="שם המועמד">
-      <input type="file" id="fileIn" accept="image/*" style="margin-top:10px">
-      <button onclick="addPerson()">שמור מועמד</button>
-      <button style="background:#dc3545; font-size: 13px;" onclick="clearVotes()">איפוס כל ההצבעות</button>
-    </div>
-
-    <div id="grid" class="grid"></div>
-  </div>
+<div class="header">
+  <div id="presenceDisplay">נוכחות: <span id="pStat">0/0</span></div>
+  <button id="adminBtn" onclick="toggleAdmin()" style="background:none; border:none; font-size:20px;">🔒</button>
 </div>
 
-<div id="log">Logs started...</div>
+<div class="container">
+  <div id="grid" class="grid"></div>
+</div>
+
+<div id="log">המערכת מוכנה...</div>
 
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-  import { getFirestore, collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc, getDocs, writeBatch, setDoc, deleteField } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+  import { getFirestore, collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc, getDocs, writeBatch, setDoc, arrayUnion } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
   import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
   const firebaseConfig = {
@@ -73,161 +61,132 @@
   const app = initializeApp(firebaseConfig);
   const db = getFirestore(app);
   const auth = getAuth(app);
-  const logBox = document.getElementById("log");
-  function log(m) { logBox.innerHTML += `> ${m}<br>`; logBox.scrollTop = logBox.scrollHeight; }
+  
+  let myId, isAdmin = false, myVotes = [];
+  let pressTimer;
 
-  let myId, role;
-  let myVotes = []; // Store multiple vote IDs locally
+  // --- Auth & Init ---
+  signInAnonymously(auth);
+  onAuthStateChanged(auth, u => { if(u) { myId = u.uid; startSync(); } });
 
-  signInAnonymously(auth).catch(e => log("Auth Error: " + e.message));
-  onAuthStateChanged(auth, u => { if(u) myId = u.uid; });
-
-  // Handle Phone Back Button
-  window.onhashchange = function() {
-    if (!window.location.hash) {
-      location.reload(); // Returns to login screen
+  // --- Admin Toggle ---
+  window.toggleAdmin = () => {
+    if(!isAdmin) {
+      const p = prompt("סיסמת מנהל:");
+      if(p === "1234") {
+        isAdmin = true;
+        document.getElementById("adminBtn").innerText = "🔓";
+        document.getElementById("log").innerText = "מצב מנהל פעיל";
+      }
+    } else {
+      isAdmin = false;
+      document.getElementById("adminBtn").innerText = "🔒";
     }
+    // Refresh view
   };
 
-  window.login = (r) => {
-    if(r === 'admin' && prompt("סיסמה:") !== "1234") return;
-    role = r;
-    window.location.hash = r; // Set hash for back button support
-    document.getElementById("loginView").classList.add("hidden");
-    document.getElementById("appView").classList.remove("hidden");
-    if(r === 'admin') document.getElementById("adminPanel").classList.remove("hidden");
-    document.getElementById("viewTitle").innerText = r === 'admin' ? "ניהול" : "בחירה מרובה";
-    startSync();
-  };
-
-  window.addPerson = async () => {
-    const nameInput = document.getElementById("nameIn");
-    const fileInput = document.getElementById("fileIn");
-    const name = nameInput.value;
-    const file = fileInput.files[0];
-    
-    if(!name) return alert("הכנס שם");
-    
-    log("Processing...");
-    let imgBase64 = "";
-    if(file) imgBase64 = await resizeImg(file);
-
-    try {
-      await addDoc(collection(db, "people"), { name, img: imgBase64 });
-      log("Success!");
-      // CRITICAL: Reset inputs correctly
-      nameInput.value = "";
-      fileInput.value = ""; 
-    } catch(e) { log("Error: " + e.message); }
-  };
-
+  // --- Core Sync ---
   function startSync() {
     onSnapshot(collection(db, "people"), (pSnap) => {
       const people = [];
       pSnap.forEach(d => people.push({ id: d.id, ...d.data() }));
       
       onSnapshot(collection(db, "votes"), (vSnap) => {
-        const allVotes = []; 
-        vSnap.forEach(v => {
-            const data = v.data();
-            // Data structure: { voterId: "uid", votedFor: ["id1", "id2"] }
-            allVotes.push({voter: v.id, targets: data.targets || []});
-        });
-        
-        // Find my specific votes
-        const myVoteEntry = allVotes.find(v => v.voter === myId);
-        myVotes = myVoteEntry ? myVoteEntry.targets : [];
-        
-        render(people, allVotes);
+        const votes = [];
+        vSnap.forEach(v => votes.push({voter: v.id, targets: v.data().targets || []}));
+        const myEntry = votes.find(v => v.voter === myId);
+        myVotes = myEntry ? myEntry.targets : [];
+        render(people, votes);
       });
     });
   }
 
-  function render(people, allVotes) {
+  // --- UI Rendering ---
+  function render(people, votes) {
     const grid = document.getElementById("grid");
     grid.innerHTML = "";
 
-    // Calculate Admin Stats
-    // "Present" = People who have received at least one vote
-    const votedTargetIds = new Set();
-    allVotes.forEach(v => v.targets.forEach(tId => votedTargetIds.add(tId)));
-    
-    if(role === 'admin') {
-      document.getElementById("presenceText").innerText = `${votedTargetIds.size} / ${people.length}`;
+    // 1. If Admin, show "Add" card first
+    if(isAdmin) {
+      const plus = document.createElement("div");
+      plus.className = "card plus-card";
+      plus.onclick = addPersonPrompt;
+      plus.innerHTML = `<span style="font-size:40px">+</span><span>הוסף משתמש</span>`;
+      grid.appendChild(plus);
     }
 
-    people.forEach(p => {
-      // Count total votes for this specific person
-      const totalForThisPerson = allVotes.reduce((acc, curr) => acc + (curr.targets.includes(p.id) ? 1 : 0), 0);
-      const isSelected = myVotes.includes(p.id);
+    // 2. Render People
+    const votedTargetIds = new Set();
+    votes.forEach(v => v.targets.forEach(tId => votedTargetIds.add(tId)));
+    document.getElementById("pStat").innerText = `${votedTargetIds.size} / ${people.length}`;
 
+    people.forEach(p => {
+      const isSelected = myVotes.includes(p.id);
+      const totalVotes = votes.reduce((acc, curr) => acc + (curr.targets.includes(p.id) ? 1 : 0), 0);
+      
       const card = document.createElement("div");
       card.className = `card ${isSelected ? 'selected' : ''}`;
-      card.onclick = () => toggleMultiVote(p.id);
+      
+      // Touch/Hold Events
+      card.onmousedown = card.ontouchstart = (e) => startHold(p, e);
+      card.onmouseup = card.ontouchend = () => clearHold();
+      card.onclick = () => toggleVote(p.id);
 
       card.innerHTML = `
         <img src="${p.img || 'https://ui-avatars.com/api/?background=random&name='+p.name}">
-        <div style="margin-top:5px; font-weight:bold">${p.name}</div>
-        ${role === 'admin' ? `
-          <div style="color:#007bff; font-weight:bold; font-size:14px">🗳️ ${totalForThisPerson}</div>
-          <div class="admin-tools">
-            <button class="btn-small" onclick="deletePerson('${p.id}', event)">✕</button>
-          </div>` : ''}
+        <div style="font-weight:bold; margin-top:5px;">${p.name}</div>
+        ${isAdmin ? `<div style="font-size:12px; color:#007bff">הצבעות: ${totalVotes}</div>
+                    <button class="edit-trigger" onclick="editUser('${p.id}','${p.name}',event)">עריכה</button>` : ''}
       `;
       grid.appendChild(card);
     });
   }
 
-  window.toggleMultiVote = async (pId) => {
-    if(role !== 'user') return;
-    
+  // --- Actions ---
+  async function toggleVote(id) {
     let newVotes = [...myVotes];
-    if (newVotes.includes(pId)) {
-      newVotes = newVotes.filter(id => id !== pId); // Remove
-    } else {
-      newVotes.push(pId); // Add
-    }
-
-    try {
-      await setDoc(doc(db, "votes", myId), { targets: newVotes });
-    } catch(e) { log("Vote Error: " + e.message); }
-  };
-
-  window.deletePerson = async (id, e) => {
-    e.stopPropagation();
-    if(confirm("למחוק לצמיתות?")) {
-      await deleteDoc(doc(db, "people", id));
-    }
-  };
-
-  window.clearVotes = async () => {
-    if(!confirm("איפוס כל ההצבעות?")) return;
-    const vSnap = await getDocs(collection(db, "votes"));
-    const batch = writeBatch(db);
-    vSnap.forEach(d => batch.delete(d.ref));
-    await batch.commit();
-    log("Votes reset.");
-  };
-
-  function resizeImg(file) {
-    return new Promise(res => {
-      const r = new FileReader();
-      r.onload = (e) => {
-        const img = new Image();
-        img.onload = () => {
-          const canvas = document.createElement("canvas");
-          const m = 180;
-          let w = img.width, h = img.height;
-          if(w > h) { if(w > m) { h *= m/w; w = m; } } else { if(h > m) { w *= m/h; h = m; } }
-          canvas.width = w; canvas.height = h;
-          canvas.getContext("2d").drawImage(img, 0,0,w,h);
-          res(canvas.toDataURL("image/jpeg", 0.7));
-        };
-        img.src = e.target.result;
-      };
-      r.readAsDataURL(file);
-    });
+    newVotes = newVotes.includes(id) ? newVotes.filter(v => v !== id) : [...newVotes, id];
+    await setDoc(doc(db, "votes", myId), { targets: newVotes });
   }
+
+  async function addPersonPrompt() {
+    const name = prompt("שם המשתמש החדש:");
+    if(!name) return;
+    // For phone simplicity, we use the default UI-Avatar unless you want to add a file input modal
+    // To keep it clean, I'll add the person with a random avatar.
+    await addDoc(collection(db, "people"), { name, img: "" });
+  }
+
+  window.editUser = async (id, oldName, e) => {
+    e.stopPropagation();
+    const action = prompt("הקלד 'save' לשינוי שם, או 'remove' למחיקה:", oldName);
+    if(action === 'remove') {
+      if(confirm("למחוק?")) await deleteDoc(doc(db, "people", id));
+    } else if(action && action !== oldName) {
+      await updateDoc(doc(db, "people", id), { name: action });
+    }
+  };
+
+  // --- Absence Reasons (Hold Feature) ---
+  function startHold(person, e) {
+    pressTimer = window.setTimeout(async () => {
+      if(isAdmin) {
+        const reasons = person.reasons || [];
+        alert(`סיבות היעדרות עבור ${person.name}:\n\n${reasons.length ? reasons.join("\n") : "אין סיבות רשומות"}`);
+      } else {
+        const reason = prompt(`מדוע ${person.name} חסר/ה?`);
+        if(reason) {
+          await updateDoc(doc(db, "people", person.id), {
+            reasons: arrayUnion(reason)
+          });
+          alert("הסיבה נשמרה");
+        }
+      }
+    }, 1000); // 1 second hold
+  }
+
+  function clearHold() { clearTimeout(pressTimer); }
+
 </script>
 </body>
 </html>
