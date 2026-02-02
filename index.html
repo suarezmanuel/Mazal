@@ -3,11 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Voting App Final</title>
+<title>Voting System Final</title>
 <style>
+  /* --- Base Styles --- */
   body { font-family: 'Segoe UI', sans-serif; direction: rtl; margin: 0; background: #f0f2f5; user-select: none; padding-bottom: 100px; }
   
-  /* --- Header & Search Bar --- */
+  /* --- Sticky Header --- */
   .header { 
     background: white; padding: 15px 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); 
     position: sticky; top: 0; z-index: 50;
@@ -16,30 +17,31 @@
   .header-top h2 { margin: 0; font-size: 18px; color: #333; }
   
   .controls { display: flex; gap: 8px; align-items: center; }
+  .search-row { display: flex; gap: 8px; }
+  
   .search-input { 
     flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 8px; 
-    font-size: 14px; outline: none; transition: border-color 0.2s;
+    font-size: 14px; outline: none;
   }
-  .search-input:focus { border-color: #007bff; }
 
   .filter-btn {
-    padding: 8px 12px; border: 1px solid #007bff; border-radius: 8px;
-    background: white; color: #007bff; cursor: pointer; font-size: 14px; white-space: nowrap;
+    padding: 8px 15px; border: 1px solid #007bff; border-radius: 8px;
+    background: white; color: #007bff; cursor: pointer; font-size: 14px; 
+    white-space: nowrap; font-weight: bold;
   }
   .filter-btn.active { background: #007bff; color: white; }
 
-  /* --- Buttons --- */
+  /* --- Admin Buttons --- */
   .toggle-btn { background: none; border: none; font-size: 24px; cursor: pointer; }
   .delete-all-btn { 
     background: #ffebee; color: #d32f2f; border: 1px solid #ffcdd2; 
     border-radius: 8px; padding: 5px 12px; font-weight: bold; cursor: pointer;
   }
 
-  /* --- Grid --- */
+  /* --- Grid & Cards --- */
   .container { padding: 15px; max-width: 600px; margin: 0 auto; }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 12px; }
 
-  /* --- Cards --- */
   .card { 
     background: white; border-radius: 12px; padding: 10px; text-align: center; 
     box-shadow: 0 2px 5px rgba(0,0,0,0.05); position: relative; border: 3px solid transparent;
@@ -61,7 +63,7 @@
   .modal-input { flex: 1; padding: 10px; border: 1px solid #ccc; border-radius: 6px; }
   .modal-btn { background: #007bff; color: white; border: none; padding: 10px; border-radius: 6px; cursor: pointer; width: 100%; }
   
-  .reason-item { background: #f8f9fa; padding: 8px; border-radius: 6px; margin-bottom: 5px; border-right: 3px solid #007bff; }
+  .reason-item { background: #f8f9fa; padding: 8px; border-radius: 6px; margin-bottom: 5px; border-right: 3px solid #007bff; font-size: 14px; }
   .hidden { display: none !important; }
 </style>
 </head>
@@ -75,7 +77,7 @@
       <button id="lockBtn" class="toggle-btn" onclick="toggleAdmin()">🔒</button>
     </div>
   </div>
-  <div style="display:flex; gap:8px;">
+  <div class="search-row">
     <input type="text" id="searchInput" class="search-input" placeholder="חפש שם..." oninput="render()">
     <button id="filterBtn" class="filter-btn" onclick="toggleFilter()">הכל</button>
   </div>
@@ -92,7 +94,7 @@
       <input id="newUserName" class="modal-input" placeholder="שם מלא">
       <input type="file" id="newUserFile" accept="image/*" class="modal-input">
     </div>
-    <div class="modal-footer"><button class="modal-btn" onclick="saveNewUser()">שמור</button></div>
+    <div class="modal-footer"><button class="modal-btn" onclick="saveNewUser()">שמור משתמש</button></div>
   </div>
 </div>
 
@@ -109,7 +111,7 @@
 
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-  import { getFirestore, collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc, setDoc, arrayUnion, writeBatch, getDocs, deleteField } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+  import { getFirestore, collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc, setDoc, arrayUnion, writeBatch, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
   import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
   const firebaseConfig = {
@@ -127,23 +129,9 @@
   
   let myId, isAdmin = false, myVotes = [], peopleData = [], votesData = [], activePersonId = null, showOnlyAbsent = false;
 
+  // --- Auth & Data Sync ---
   signInAnonymously(auth);
   onAuthStateChanged(auth, u => { if(u) { myId = u.uid; startSync(); } });
-
-  window.toggleAdmin = () => {
-    isAdmin = !isAdmin;
-    if (isAdmin && prompt("סיסמה:") !== "1234") isAdmin = false;
-    document.getElementById("lockBtn").innerText = isAdmin ? "🔓" : "🔒";
-    document.getElementById("deleteAllBtn").classList.toggle("hidden", !isAdmin);
-    render();
-  };
-
-  window.toggleFilter = () => {
-    showOnlyAbsent = !showOnlyAbsent;
-    document.getElementById("filterBtn").innerText = showOnlyAbsent ? "חסרים" : "הכל";
-    document.getElementById("filterBtn").classList.toggle("active", showOnlyAbsent);
-    render();
-  };
 
   function startSync() {
     onSnapshot(collection(db, "people"), (snap) => {
@@ -152,7 +140,8 @@
       peopleData.sort((a, b) => a.name.localeCompare(b.name, 'he'));
       render();
     });
-    onSnapshot(collectdb, "votes"), (snap) => {
+
+    onSnapshot(collection(db, "votes"), (snap) => {
       votesData = [];
       snap.forEach(v => votesData.push({voter: v.id, targets: v.data().targets || []}));
       const myEntry = votesData.find(v => v.voter === myId);
@@ -161,24 +150,23 @@
     });
   }
 
-    window.render = () => {
+  // --- Core Rendering ---
+  window.render = () => {
     const grid = document.getElementById("grid");
     const searchText = document.getElementById("searchInput").value.toLowerCase();
     grid.innerHTML = "";
 
-    // Stats Calculation
-    const validIds = peopleData.map(p => p.id);
+    // Stats Logic
+    const validPeopleIds = peopleData.map(p => p.id);
     const votedIds = new Set();
-    
-    // Create a map to quickly look up vote counts
     const voteCounts = {};
     peopleData.forEach(p => voteCounts[p.id] = 0);
     
     votesData.forEach(v => {
       v.targets.forEach(tId => {
-        if(validIds.includes(tId)) {
+        if(validPeopleIds.includes(tId)) {
           votedIds.add(tId);
-          voteCounts[tId] = (voteCounts[tId] || 0) + 1;
+          voteCounts[tId]++;
         }
       });
     });
@@ -190,29 +178,27 @@
       const plus = document.createElement("div");
       plus.className = "card"; plus.style.borderStyle = "dashed"; plus.style.borderColor = "#007bff";
       plus.onclick = () => document.getElementById("addUserModal").classList.remove("hidden");
-      plus.innerHTML = `<span style="font-size:40px; color:#007bff">+</span><span style="color:#007bff">הוסף</span>`;
+      plus.innerHTML = `<span style="font-size:40px; color:#007bff">+</span><span style="color:#007bff">הוסף משתמש</span>`;
       grid.appendChild(plus);
     }
 
+    // List People
     peopleData.forEach(p => {
+      const votesForPerson = voteCounts[p.id] || 0;
       const isSelected = myVotes.includes(p.id);
-      const totalVotesForPerson = voteCounts[p.id] || 0;
-      
-      // --- FILTER LOGIC ---
-      // 1. Search Filter
+
+      // --- FILTERS ---
       if (searchText && !p.name.toLowerCase().includes(searchText)) return;
-      
-      // 2. Absent Filter: If active, only show people with 0 votes
-      if (showOnlyAbsent && totalVotesForPerson > 0) return;
+      if (showOnlyAbsent && votesForPerson > 0) return; // Only show people with 0 votes
 
       const card = document.createElement("div");
       card.className = `card ${isSelected ? 'selected' : ''}`;
       card.onclick = (e) => { if(!e.target.closest('button')) toggleVote(p.id); };
-
+      
       card.innerHTML = `
         <img src="${p.img || 'https://ui-avatars.com/api/?background=random&name='+p.name}">
         <div style="font-weight:bold; font-size:14px;">${p.name}</div>
-        ${isAdmin ? `<div style="font-size:11px; color:#666">🗳️ ${totalVotesForPerson}</div>` : ''}
+        ${isAdmin ? `<div style="font-size:11px; color:#666">🗳️ הצבעות: ${votesForPerson}</div>` : ''}
         <div class="action-row">
           <button class="reason-btn" onclick="openReasonsModal('${p.id}')">💬 ${p.reasons?.length || 0}</button>
           ${isAdmin ? `<button class="admin-btn" onclick="deleteUser('${p.id}')">✕</button>` : ''}
@@ -221,53 +207,73 @@
     });
   };
 
+  // --- Actions ---
   async function toggleVote(id) {
     let newVotes = myVotes.includes(id) ? myVotes.filter(v => v !== id) : [...myVotes, id];
     await setDoc(doc(db, "votes", myId), { targets: newVotes });
   }
 
-  window.saveNewUser = async () => {
-    const name = document.getElementById("newUserName").value;
-    const file = document.getElementById("newUserFile").files[0];
-    if(!name) return;
-    let img = file ? await resizeImg(file) : "";
-    await addDoc(collection(db, "people"), { name, img, reasons: [] });
-    closeModal('addUserModal');
+  window.toggleAdmin = () => {
+    if (!isAdmin) {
+      if (prompt("סיסמה:") !== "1234") return;
+      isAdmin = true;
+      document.getElementById("lockBtn").innerText = "🔓";
+      document.getElementById("deleteAllBtn").classList.remove("hidden");
+    } else {
+      isAdmin = false;
+      document.getElementById("lockBtn").innerText = "🔒";
+      document.getElementById("deleteAllBtn").classList.add("hidden");
+    }
+    render();
   };
 
+  window.toggleFilter = () => {
+    showOnlyAbsent = !showOnlyAbsent;
+    document.getElementById("filterBtn").innerText = showOnlyAbsent ? "חסרים" : "הכל";
+    document.getElementById("filterBtn").classList.toggle("active", showOnlyAbsent);
+    render();
+  };
+
+  window.saveNewUser = async () => {
+    const name = document.getElementById("newUserName").value;
+    const fileInput = document.getElementById("newUserFile");
+    if(!name) return;
+    const img = fileInput.files[0] ? await resizeImg(fileInput.files[0]) : "";
+    await addDoc(collection(db, "people"), { name, img, reasons: [] });
+    closeModal('addUserModal');
+    fileInput.value = "";
+  };
+
+  window.clearAllData = async () => {
+    if(!confirm("אפס הכל? (מוחק את כל ההצבעות והסיבות של כולם)")) return;
+    const batch = writeBatch(db);
+    const vSnap = await getDocs(collection(db, "votes"));
+    vSnap.forEach(d => batch.delete(d.ref));
+    peopleData.forEach(p => batch.update(doc(db, "people", p.id), { reasons: [] }));
+    await batch.commit();
+  };
+
+  // --- Reason Modals ---
   window.openReasonsModal = (id) => {
     activePersonId = id;
     const p = peopleData.find(x => x.id === id);
     document.getElementById("reasonsTitle").innerText = "סיבות: " + p.name;
     const list = document.getElementById("reasonsList");
-    list.innerHTML = p.reasons?.length ? p.reasons.map(r => `<div class="reason-item">${r}</div>`).join('') : "אין סיבות";
+    list.innerHTML = p.reasons?.length ? p.reasons.map(r => `<div class="reason-item">${r}</div>`).join('') : "אין סיבות רשומות";
     document.getElementById("reasonsModal").classList.remove("hidden");
   };
 
   window.addReason = async () => {
-    const val = document.getElementById("newReasonInput").value;
+    const val = document.getElementById("newReasonInput").value.trim();
     if(!val) return;
     await updateDoc(doc(db, "people", activePersonId), { reasons: arrayUnion(val) });
     document.getElementById("newReasonInput").value = "";
-    openReasonsModal(activePersonId);
   };
 
-  window.clearAllData = async () => {
-    if(!confirm("אפס הכל? (הצבעות וסיבות)")) return;
-    const batch = writeBatch(db);
-    // Delete all votes
-    const vSnap = await getDocs(collection(db, "votes"));
-    vSnap.forEach(d => batch.delete(d.ref));
-    // Clear all reasons from people
-    peopleData.forEach(p => {
-      batch.update(doc(db, "people", p.id), { reasons: [] });
-    });
-    await batch.commit();
-  };
-
-  window.deleteUser = async (id) => { if(confirm("למחוק?")) await deleteDoc(doc(db, "people", id)); };
+  window.deleteUser = async (id) => { if(confirm("למחוק משתמש זה?")) await deleteDoc(doc(db, "people", id)); };
   window.closeModal = (id) => document.getElementById(id).classList.add("hidden");
 
+  // --- Utility ---
   function resizeImg(file) {
     return new Promise(res => {
       const r = new FileReader();
