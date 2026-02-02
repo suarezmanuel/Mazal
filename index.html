@@ -3,25 +3,25 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Unified Voting App</title>
+<title>Voting App - Reasons UI</title>
 <style>
-  /* Base Styles */
-  body { font-family: 'Segoe UI', sans-serif; direction: rtl; margin: 0; background: #f4f6f9; user-select: none; padding-bottom: 100px; }
+  /* --- Base Styles --- */
+  body { font-family: 'Segoe UI', sans-serif; direction: rtl; margin: 0; background: #f0f2f5; user-select: none; padding-bottom: 100px; }
   
-  /* Header */
+  /* --- Header --- */
   .header { 
     display: flex; justify-content: space-between; align-items: center; 
     padding: 15px 20px; background: white; box-shadow: 0 2px 10px rgba(0,0,0,0.05); 
-    position: sticky; top: 0; z-index: 100;
+    position: sticky; top: 0; z-index: 50;
   }
   .header h2 { margin: 0; font-size: 18px; color: #333; }
   .toggle-btn { background: none; border: none; font-size: 24px; cursor: pointer; }
 
-  /* Grid */
+  /* --- Main Grid --- */
   .container { padding: 15px; max-width: 600px; margin: 0 auto; }
-  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 12px; }
 
-  /* Cards */
+  /* --- Person Card --- */
   .card { 
     background: white; border-radius: 12px; padding: 10px; text-align: center; 
     box-shadow: 0 2px 5px rgba(0,0,0,0.05); position: relative; border: 3px solid transparent;
@@ -34,43 +34,69 @@
     width: 80px; height: 80px; border-radius: 50%; object-fit: cover; 
     background: #eee; margin-bottom: 8px; pointer-events: none;
   }
+
+  /* --- Card Buttons --- */
+  .action-row { display: flex; gap: 5px; width: 100%; margin-top: auto; padding-top: 8px; }
   
-  /* Buttons on Card */
-  .action-row {
-    display: flex; gap: 5px; width: 100%; margin-top: auto; padding-top: 8px;
-  }
-  
-  /* The Blue Reason Button (1/4 width approx) */
   .reason-btn {
     flex: 1; background: #e7f1ff; color: #007bff; border: 1px solid #b3d7ff;
     border-radius: 6px; font-size: 14px; padding: 5px 0; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; gap: 5px;
   }
-  .reason-btn:hover { background: #007bff; color: white; }
-
-  /* Admin Buttons */
+  
   .admin-btn {
-    flex: 1; background: #ffeeba; color: #856404; border: 1px solid #ffeeba;
-    border-radius: 6px; font-size: 12px; padding: 5px 0; cursor: pointer;
+    width: 30px; background: #ffeeba; color: #856404; border: 1px solid #ffeeba;
+    border-radius: 6px; font-size: 14px; padding: 5px 0; cursor: pointer;
   }
 
-  /* Admin "Add User" Card */
   .plus-card { 
     border: 2px dashed #007bff; color: #007bff; 
     justify-content: center; min-height: 160px; cursor: pointer;
   }
-  .plus-card:hover { background: #e7f1ff; }
 
-  /* Hidden Inputs */
+  /* --- REASONS MODAL (Popup) --- */
+  .modal-overlay {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.5); z-index: 100;
+    display: flex; justify-content: center; align-items: center;
+  }
+  .modal-box {
+    background: white; width: 90%; max-width: 400px; max-height: 80vh;
+    border-radius: 12px; display: flex; flex-direction: column; overflow: hidden;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+  }
+  .modal-header {
+    padding: 15px; background: #f8f9fa; border-bottom: 1px solid #ddd;
+    display: flex; justify-content: space-between; align-items: center;
+    font-weight: bold;
+  }
+  .modal-body { padding: 15px; overflow-y: auto; flex: 1; }
+  
+  .reason-item {
+    background: #fff; border: 1px solid #eee; padding: 10px; border-radius: 8px;
+    margin-bottom: 8px; font-size: 14px; color: #333; display: flex; align-items: center;
+  }
+  .reason-item:before { content: "•"; color: #007bff; margin-left: 8px; font-size: 20px; }
+
+  .modal-footer {
+    padding: 10px; border-top: 1px solid #eee; background: #fff;
+    display: flex; gap: 10px;
+  }
+  .modal-input { flex: 1; padding: 8px; border: 1px solid #ccc; border-radius: 6px; }
+  .modal-add-btn {
+    background: #007bff; color: white; border: none; padding: 0 15px;
+    border-radius: 6px; font-size: 20px; cursor: pointer;
+  }
+  
+  /* Utilities */
   .hidden { display: none !important; }
-  #log { position: fixed; bottom: 0; width: 100%; background: #222; color: #0f0; font-size: 10px; padding: 5px; opacity: 0.8; pointer-events: none; }
+  .close-btn { background: none; border: none; font-size: 20px; cursor: pointer; color: #666; }
 </style>
 </head>
 <body>
 
 <div class="header">
-  <div>
-    <h2>נוכחות: <span id="pStat">0/0</span></h2>
-  </div>
+  <div><h2>נוכחות: <span id="pStat">0/0</span></h2></div>
   <button id="lockBtn" class="toggle-btn" onclick="toggleAdmin()">🔒</button>
 </div>
 
@@ -78,9 +104,24 @@
   <div id="grid" class="grid"></div>
 </div>
 
-<input type="file" id="imgUpload" accept="image/*" class="hidden" onchange="processNewUser()">
+<div id="reasonsModal" class="modal-overlay hidden">
+  <div class="modal-box">
+    <div class="modal-header">
+      <span id="modalTitle">סיבות</span>
+      <button class="close-btn" onclick="closeModal()">✕</button>
+    </div>
+    
+    <div class="modal-body" id="reasonsList">
+      </div>
 
-<div id="log">מערכת מוכנה...</div>
+    <div class="modal-footer">
+      <input id="newReasonInput" class="modal-input" placeholder="הוסף סיבה...">
+      <button class="modal-add-btn" onclick="addReason()">+</button>
+    </div>
+  </div>
+</div>
+
+<input type="file" id="imgUpload" accept="image/*" class="hidden" onchange="processNewUser()">
 
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
@@ -101,66 +142,62 @@
   const auth = getAuth(app);
   
   let myId, isAdmin = false, myVotes = [];
-  let tempName = ""; // Temporary storage for name during creation
+  let peopleData = [], votesData = [];
+  
+  // State for Modal
+  let activePersonId = null;
 
-  // --- Auth ---
+  // --- Auth & Init ---
   signInAnonymously(auth);
   onAuthStateChanged(auth, u => { if(u) { myId = u.uid; startSync(); } });
 
-  // --- Toggle Admin Mode ---
+  // --- 1. Toggle Admin ---
   window.toggleAdmin = () => {
-    const btn = document.getElementById("lockBtn");
-    
     if (isAdmin) {
-      // Exit Admin Mode
       isAdmin = false;
-      btn.innerText = "🔒";
-      render(); // Re-render to hide admin tools
+      document.getElementById("lockBtn").innerText = "🔒";
+      render();
     } else {
-      // Enter Admin Mode
-      const p = prompt("סיסמת מנהל:");
-      if (p === "1234") {
+      if (prompt("סיסמת מנהל:") === "1234") {
         isAdmin = true;
-        btn.innerText = "🔓";
-        render(); // Re-render to show admin tools
+        document.getElementById("lockBtn").innerText = "🔓";
+        render();
       } else {
         alert("סיסמה שגויה");
       }
     }
   };
 
-  // --- Sync Data ---
-  let peopleData = [];
-  let votesData = [];
-
+  // --- 2. Sync Data ---
   function startSync() {
     onSnapshot(collection(db, "people"), (snap) => {
       peopleData = [];
       snap.forEach(d => peopleData.push({ id: d.id, ...d.data() }));
       render();
+      // If modal is open, refresh it live
+      if(activePersonId) openReasonsModal(activePersonId);
     });
     
     onSnapshot(collection(db, "votes"), (snap) => {
       votesData = [];
       snap.forEach(v => votesData.push({voter: v.id, targets: v.data().targets || []}));
-      
       const myEntry = votesData.find(v => v.voter === myId);
       myVotes = myEntry ? myEntry.targets : [];
       render();
     });
   }
 
-  // --- Rendering ---
+  // --- 3. Render Main Grid ---
   function render() {
     const grid = document.getElementById("grid");
     grid.innerHTML = "";
 
-    // 1. Stats Calculation
+    // Calc Stats
     const votedIds = new Set();
     votesData.forEach(v => v.targets.forEach(t => votedIds.add(t)));
     document.getElementById("pStat").innerText = `${votedIds.size} / ${peopleData.length}`;
 
-    // 2. Admin "Add" Card
+    // Admin Add Card
     if (isAdmin) {
       const plus = document.createElement("div");
       plus.className = "card plus-card";
@@ -169,29 +206,29 @@
       grid.appendChild(plus);
     }
 
-    // 3. Render People
+    // People Cards
     peopleData.forEach(p => {
       const isSelected = myVotes.includes(p.id);
       const voteCount = votesData.reduce((acc, curr) => acc + (curr.targets.includes(p.id) ? 1 : 0), 0);
-      
+      const reasonsCount = p.reasons ? p.reasons.length : 0;
+
       const card = document.createElement("div");
       card.className = `card ${isSelected ? 'selected' : ''}`;
       
-      // Main click toggles vote
+      // Card Click (Vote)
       card.onclick = (e) => {
-        // Prevent vote toggle if clicking buttons
-        if (e.target.tagName === 'BUTTON') return;
+        if(e.target.closest('button')) return; // Ignore button clicks
         toggleVote(p.id);
       };
 
-      let html = `
+      card.innerHTML = `
         <img src="${p.img || 'https://ui-avatars.com/api/?background=random&name='+p.name}">
         <div style="font-weight:bold; width:100%">${p.name}</div>
         ${isAdmin ? `<div style="font-size:11px; color:#666; margin-bottom:5px">הצבעות: ${voteCount}</div>` : ''}
         
         <div class="action-row">
-          <button class="reason-btn" onclick="handleReason('${p.id}', '${p.name}', ${JSON.stringify(p.reasons||[])})">
-            💬 ${isAdmin ? (p.reasons?.length || 0) : 'הוסף סיבה'}
+          <button class="reason-btn" onclick="openReasonsModal('${p.id}')">
+            💬 ${reasonsCount}
           </button>
           
           ${isAdmin ? `
@@ -200,82 +237,90 @@
           ` : ''}
         </div>
       `;
-      
-      card.innerHTML = html;
       grid.appendChild(card);
     });
   }
 
-  // --- Logic Functions ---
-
+  // --- 4. Vote Logic ---
   async function toggleVote(id) {
     let newVotes = [...myVotes];
-    if (newVotes.includes(id)) {
-      newVotes = newVotes.filter(v => v !== id);
-    } else {
-      newVotes.push(id);
-    }
+    if (newVotes.includes(id)) newVotes = newVotes.filter(v => v !== id);
+    else newVotes.push(id);
     await setDoc(doc(db, "votes", myId), { targets: newVotes });
   }
 
-  // 1. Add User Flow
+  // --- 5. Add Person Flow ---
+  let tempName = "";
   window.initiateAddUser = () => {
     tempName = prompt("שם המשתמש החדש:");
     if (!tempName) return;
-    // Trigger file input click
-    document.getElementById("imgUpload").click();
+    document.getElementById("imgUpload").click(); // Open Camera/Gallery
   };
 
-  // 2. Process Image & Save
   window.processNewUser = async () => {
-    const fileInput = document.getElementById("imgUpload");
-    const file = fileInput.files[0];
+    const file = document.getElementById("imgUpload").files[0];
+    let imgBase64 = "";
     
     if (file) {
-      log("מעבד תמונה...");
-      const imgBase64 = await resizeImg(file);
-      await addDoc(collection(db, "people"), { name: tempName, img: imgBase64 });
-    } else {
-      await addDoc(collection(db, "people"), { name: tempName, img: "" });
+      imgBase64 = await resizeImg(file);
     }
     
-    log("משתמש נוסף בהצלחה!");
-    fileInput.value = ""; // Reset
+    await addDoc(collection(db, "people"), { name: tempName, img: imgBase64 });
+    document.getElementById("imgUpload").value = ""; // Reset
   };
 
-  // 3. Reasons Logic
-  window.handleReason = async (id, name, currentReasons) => {
-    if (isAdmin) {
-      // Admin sees list
-      if (!currentReasons || currentReasons.length === 0) return alert("אין סיבות רשומות.");
-      alert(`סיבות עבור ${name}:\n\n- ${currentReasons.join("\n- ")}`);
+  // --- 6. Reasons Modal Logic ---
+  window.openReasonsModal = (id) => {
+    activePersonId = id;
+    const person = peopleData.find(p => p.id === id);
+    if(!person) return;
+
+    document.getElementById("reasonsModal").classList.remove("hidden");
+    document.getElementById("modalTitle").innerText = "סיבות - " + person.name;
+    
+    const list = document.getElementById("reasonsList");
+    list.innerHTML = "";
+
+    if (person.reasons && person.reasons.length > 0) {
+      person.reasons.forEach(r => {
+        const item = document.createElement("div");
+        item.className = "reason-item";
+        item.innerText = r;
+        list.appendChild(item);
+      });
     } else {
-      // User adds reason
-      const reason = prompt(`למה ${name} לא מגיע/ה?`);
-      if (reason) {
-        await updateDoc(doc(db, "people", id), {
-          reasons: arrayUnion(reason)
-        });
-        alert("הסיבה נשמרה");
-      }
+      list.innerHTML = `<div style="color:#999; text-align:center; margin-top:20px;">אין סיבות רשומות</div>`;
     }
   };
 
-  // 4. Admin Edit/Delete
+  window.addReason = async () => {
+    const input = document.getElementById("newReasonInput");
+    const val = input.value.trim();
+    if (!val || !activePersonId) return;
+
+    await updateDoc(doc(db, "people", activePersonId), {
+      reasons: arrayUnion(val)
+    });
+    input.value = "";
+  };
+
+  window.closeModal = () => {
+    document.getElementById("reasonsModal").classList.add("hidden");
+    activePersonId = null;
+  };
+
+  // --- 7. Admin Edit/Delete ---
   window.editUser = async (id, oldName) => {
     const newName = prompt("ערוך שם:", oldName);
     if (newName && newName !== oldName) {
       await updateDoc(doc(db, "people", id), { name: newName });
     }
   };
-
   window.deleteUser = async (id) => {
-    if (confirm("למחוק משתמש זה?")) {
-      await deleteDoc(doc(db, "people", id));
-    }
+    if (confirm("למחוק?")) await deleteDoc(doc(db, "people", id));
   };
 
-  // Utility: Image Resize
+  // --- Utility: Resize Image ---
   function resizeImg(file) {
     return new Promise(res => {
       const r = new FileReader();
@@ -283,7 +328,7 @@
         const img = new Image();
         img.onload = () => {
           const canvas = document.createElement("canvas");
-          const m = 200; // slightly larger for better quality
+          const m = 200; 
           let w = img.width, h = img.height;
           if(w > h) { if(w > m) { h *= m/w; w = m; } } else { if(h > m) { w *= m/h; h = m; } }
           canvas.width = w; canvas.height = h;
@@ -295,8 +340,6 @@
       r.readAsDataURL(file);
     });
   }
-  
-  function log(m) { document.getElementById("log").innerText = m; }
 </script>
 </body>
 </html>
