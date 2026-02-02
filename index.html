@@ -152,7 +152,7 @@
       peopleData.sort((a, b) => a.name.localeCompare(b.name, 'he'));
       render();
     });
-    onSnapshot(collection(db, "votes"), (snap) => {
+    onSnapshot(collectdb, "votes"), (snap) => {
       votesData = [];
       snap.forEach(v => votesData.push({voter: v.id, targets: v.data().targets || []}));
       const myEntry = votesData.find(v => v.voter === myId);
@@ -161,17 +161,31 @@
     });
   }
 
-  window.render = () => {
+    window.render = () => {
     const grid = document.getElementById("grid");
     const searchText = document.getElementById("searchInput").value.toLowerCase();
     grid.innerHTML = "";
 
-    // Stats
+    // Stats Calculation
     const validIds = peopleData.map(p => p.id);
     const votedIds = new Set();
-    votesData.forEach(v => v.targets.forEach(tId => { if(validIds.includes(tId)) votedIds.add(tId); }));
+    
+    // Create a map to quickly look up vote counts
+    const voteCounts = {};
+    peopleData.forEach(p => voteCounts[p.id] = 0);
+    
+    votesData.forEach(v => {
+      v.targets.forEach(tId => {
+        if(validIds.includes(tId)) {
+          votedIds.add(tId);
+          voteCounts[tId] = (voteCounts[tId] || 0) + 1;
+        }
+      });
+    });
+    
     document.getElementById("pStat").innerText = `${votedIds.size} / ${peopleData.length}`;
 
+    // Admin Add Card
     if (isAdmin) {
       const plus = document.createElement("div");
       plus.className = "card"; plus.style.borderStyle = "dashed"; plus.style.borderColor = "#007bff";
@@ -181,24 +195,24 @@
     }
 
     peopleData.forEach(p => {
-      const isVoted = votedIds.has(p.id);
       const isSelected = myVotes.includes(p.id);
-      const hasReason = p.reasons && p.reasons.length > 0;
+      const totalVotesForPerson = voteCounts[p.id] || 0;
       
-      // Filter Logic
+      // --- FILTER LOGIC ---
+      // 1. Search Filter
       if (searchText && !p.name.toLowerCase().includes(searchText)) return;
-      if (showOnlyAbsent && (!hasReason || isVoted)) return;
+      
+      // 2. Absent Filter: If active, only show people with 0 votes
+      if (showOnlyAbsent && totalVotesForPerson > 0) return;
 
       const card = document.createElement("div");
       card.className = `card ${isSelected ? 'selected' : ''}`;
       card.onclick = (e) => { if(!e.target.closest('button')) toggleVote(p.id); };
-      
-      const voteCount = votesData.reduce((acc, curr) => acc + (curr.targets.includes(p.id) ? 1 : 0), 0);
 
       card.innerHTML = `
         <img src="${p.img || 'https://ui-avatars.com/api/?background=random&name='+p.name}">
         <div style="font-weight:bold; font-size:14px;">${p.name}</div>
-        ${isAdmin ? `<div style="font-size:11px; color:#666">🗳️ ${voteCount}</div>` : ''}
+        ${isAdmin ? `<div style="font-size:11px; color:#666">🗳️ ${totalVotesForPerson}</div>` : ''}
         <div class="action-row">
           <button class="reason-btn" onclick="openReasonsModal('${p.id}')">💬 ${p.reasons?.length || 0}</button>
           ${isAdmin ? `<button class="admin-btn" onclick="deleteUser('${p.id}')">✕</button>` : ''}
