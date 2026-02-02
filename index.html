@@ -3,50 +3,88 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Voting & Presence App</title>
+<title>Unified Voting App</title>
 <style>
-  body { font-family: 'Segoe UI', sans-serif; direction: rtl; margin: 0; background: #f8f9fa; user-select: none; }
-  .header { display: flex; justify-content: space-between; align-items: center; padding: 15px; background: white; box-shadow: 0 2px 5px rgba(0,0,0,0.1); sticky: top; }
-  .container { padding: 15px; max-width: 600px; margin: 0 auto; }
+  /* Base Styles */
+  body { font-family: 'Segoe UI', sans-serif; direction: rtl; margin: 0; background: #f4f6f9; user-select: none; padding-bottom: 100px; }
   
-  /* Grid & Cards */
-  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 12px; }
-  .card { 
-    background: white; border-radius: 15px; padding: 12px; text-align: center; 
-    box-shadow: 0 2px 8px rgba(0,0,0,0.06); cursor: pointer; position: relative; border: 3px solid transparent;
-    transition: transform 0.1s;
+  /* Header */
+  .header { 
+    display: flex; justify-content: space-between; align-items: center; 
+    padding: 15px 20px; background: white; box-shadow: 0 2px 10px rgba(0,0,0,0.05); 
+    position: sticky; top: 0; z-index: 100;
   }
-  .card:active { transform: scale(0.96); }
-  .card.selected { border-color: #28a745; background: #f0fff4; }
-  .card img { width: 70px; height: 70px; border-radius: 50%; object-fit: cover; background: #eee; }
-  
-  /* Admin Extension Styles */
-  .plus-card { border: 2px dashed #007bff; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #007bff; min-height: 130px; }
-  .admin-badge { position: absolute; top: 5px; right: 5px; background: #ffc107; font-size: 10px; padding: 2px 5px; border-radius: 5px; }
-  .edit-trigger { background: #007bff; color: white; border: none; border-radius: 4px; padding: 3px 8px; font-size: 11px; margin-top: 5px; }
+  .header h2 { margin: 0; font-size: 18px; color: #333; }
+  .toggle-btn { background: none; border: none; font-size: 24px; cursor: pointer; }
 
-  /* Utilities */
+  /* Grid */
+  .container { padding: 15px; max-width: 600px; margin: 0 auto; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; }
+
+  /* Cards */
+  .card { 
+    background: white; border-radius: 12px; padding: 10px; text-align: center; 
+    box-shadow: 0 2px 5px rgba(0,0,0,0.05); position: relative; border: 3px solid transparent;
+    transition: transform 0.1s; display: flex; flex-direction: column; align-items: center;
+  }
+  .card:active { transform: scale(0.98); }
+  .card.selected { border-color: #28a745; background: #f0fff4; }
+  
+  .card img { 
+    width: 80px; height: 80px; border-radius: 50%; object-fit: cover; 
+    background: #eee; margin-bottom: 8px; pointer-events: none;
+  }
+  
+  /* Buttons on Card */
+  .action-row {
+    display: flex; gap: 5px; width: 100%; margin-top: auto; padding-top: 8px;
+  }
+  
+  /* The Blue Reason Button (1/4 width approx) */
+  .reason-btn {
+    flex: 1; background: #e7f1ff; color: #007bff; border: 1px solid #b3d7ff;
+    border-radius: 6px; font-size: 14px; padding: 5px 0; cursor: pointer;
+  }
+  .reason-btn:hover { background: #007bff; color: white; }
+
+  /* Admin Buttons */
+  .admin-btn {
+    flex: 1; background: #ffeeba; color: #856404; border: 1px solid #ffeeba;
+    border-radius: 6px; font-size: 12px; padding: 5px 0; cursor: pointer;
+  }
+
+  /* Admin "Add User" Card */
+  .plus-card { 
+    border: 2px dashed #007bff; color: #007bff; 
+    justify-content: center; min-height: 160px; cursor: pointer;
+  }
+  .plus-card:hover { background: #e7f1ff; }
+
+  /* Hidden Inputs */
   .hidden { display: none !important; }
-  button { cursor: pointer; }
-  #log { position: fixed; bottom: 0; left: 0; right: 0; height: 60px; background: #222; color: #0f0; font-family: monospace; font-size: 10px; overflow-y: auto; padding: 5px; z-index: 1000; opacity: 0.8; }
+  #log { position: fixed; bottom: 0; width: 100%; background: #222; color: #0f0; font-size: 10px; padding: 5px; opacity: 0.8; pointer-events: none; }
 </style>
 </head>
 <body>
 
 <div class="header">
-  <div id="presenceDisplay">נוכחות: <span id="pStat">0/0</span></div>
-  <button id="adminBtn" onclick="toggleAdmin()" style="background:none; border:none; font-size:20px;">🔒</button>
+  <div>
+    <h2>נוכחות: <span id="pStat">0/0</span></h2>
+  </div>
+  <button id="lockBtn" class="toggle-btn" onclick="toggleAdmin()">🔒</button>
 </div>
 
 <div class="container">
   <div id="grid" class="grid"></div>
 </div>
 
-<div id="log">המערכת מוכנה...</div>
+<input type="file" id="imgUpload" accept="image/*" class="hidden" onchange="processNewUser()">
+
+<div id="log">מערכת מוכנה...</div>
 
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-  import { getFirestore, collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc, getDocs, writeBatch, setDoc, arrayUnion } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+  import { getFirestore, collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc, setDoc, arrayUnion } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
   import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
   const firebaseConfig = {
@@ -63,130 +101,202 @@
   const auth = getAuth(app);
   
   let myId, isAdmin = false, myVotes = [];
-  let pressTimer;
+  let tempName = ""; // Temporary storage for name during creation
 
-  // --- Auth & Init ---
+  // --- Auth ---
   signInAnonymously(auth);
   onAuthStateChanged(auth, u => { if(u) { myId = u.uid; startSync(); } });
 
-  // --- Admin Toggle ---
+  // --- Toggle Admin Mode ---
   window.toggleAdmin = () => {
-    if(!isAdmin) {
-      const p = prompt("סיסמת מנהל:");
-      if(p === "1234") {
-        isAdmin = true;
-        document.getElementById("adminBtn").innerText = "🔓";
-        document.getElementById("log").innerText = "מצב מנהל פעיל";
-      }
-    } else {
+    const btn = document.getElementById("lockBtn");
+    
+    if (isAdmin) {
+      // Exit Admin Mode
       isAdmin = false;
-      document.getElementById("adminBtn").innerText = "🔒";
+      btn.innerText = "🔒";
+      render(); // Re-render to hide admin tools
+    } else {
+      // Enter Admin Mode
+      const p = prompt("סיסמת מנהל:");
+      if (p === "1234") {
+        isAdmin = true;
+        btn.innerText = "🔓";
+        render(); // Re-render to show admin tools
+      } else {
+        alert("סיסמה שגויה");
+      }
     }
-    // Refresh view
   };
 
-  // --- Core Sync ---
+  // --- Sync Data ---
+  let peopleData = [];
+  let votesData = [];
+
   function startSync() {
-    onSnapshot(collection(db, "people"), (pSnap) => {
-      const people = [];
-      pSnap.forEach(d => people.push({ id: d.id, ...d.data() }));
+    onSnapshot(collection(db, "people"), (snap) => {
+      peopleData = [];
+      snap.forEach(d => peopleData.push({ id: d.id, ...d.data() }));
+      render();
+    });
+    
+    onSnapshot(collection(db, "votes"), (snap) => {
+      votesData = [];
+      snap.forEach(v => votesData.push({voter: v.id, targets: v.data().targets || []}));
       
-      onSnapshot(collection(db, "votes"), (vSnap) => {
-        const votes = [];
-        vSnap.forEach(v => votes.push({voter: v.id, targets: v.data().targets || []}));
-        const myEntry = votes.find(v => v.voter === myId);
-        myVotes = myEntry ? myEntry.targets : [];
-        render(people, votes);
-      });
+      const myEntry = votesData.find(v => v.voter === myId);
+      myVotes = myEntry ? myEntry.targets : [];
+      render();
     });
   }
 
-  // --- UI Rendering ---
-  function render(people, votes) {
+  // --- Rendering ---
+  function render() {
     const grid = document.getElementById("grid");
     grid.innerHTML = "";
 
-    // 1. If Admin, show "Add" card first
-    if(isAdmin) {
+    // 1. Stats Calculation
+    const votedIds = new Set();
+    votesData.forEach(v => v.targets.forEach(t => votedIds.add(t)));
+    document.getElementById("pStat").innerText = `${votedIds.size} / ${peopleData.length}`;
+
+    // 2. Admin "Add" Card
+    if (isAdmin) {
       const plus = document.createElement("div");
       plus.className = "card plus-card";
-      plus.onclick = addPersonPrompt;
-      plus.innerHTML = `<span style="font-size:40px">+</span><span>הוסף משתמש</span>`;
+      plus.onclick = initiateAddUser;
+      plus.innerHTML = `<span style="font-size:40px; line-height:1">+</span><span>הוסף משתמש</span>`;
       grid.appendChild(plus);
     }
 
-    // 2. Render People
-    const votedTargetIds = new Set();
-    votes.forEach(v => v.targets.forEach(tId => votedTargetIds.add(tId)));
-    document.getElementById("pStat").innerText = `${votedTargetIds.size} / ${people.length}`;
-
-    people.forEach(p => {
+    // 3. Render People
+    peopleData.forEach(p => {
       const isSelected = myVotes.includes(p.id);
-      const totalVotes = votes.reduce((acc, curr) => acc + (curr.targets.includes(p.id) ? 1 : 0), 0);
+      const voteCount = votesData.reduce((acc, curr) => acc + (curr.targets.includes(p.id) ? 1 : 0), 0);
       
       const card = document.createElement("div");
       card.className = `card ${isSelected ? 'selected' : ''}`;
       
-      // Touch/Hold Events
-      card.onmousedown = card.ontouchstart = (e) => startHold(p, e);
-      card.onmouseup = card.ontouchend = () => clearHold();
-      card.onclick = () => toggleVote(p.id);
+      // Main click toggles vote
+      card.onclick = (e) => {
+        // Prevent vote toggle if clicking buttons
+        if (e.target.tagName === 'BUTTON') return;
+        toggleVote(p.id);
+      };
 
-      card.innerHTML = `
+      let html = `
         <img src="${p.img || 'https://ui-avatars.com/api/?background=random&name='+p.name}">
-        <div style="font-weight:bold; margin-top:5px;">${p.name}</div>
-        ${isAdmin ? `<div style="font-size:12px; color:#007bff">הצבעות: ${totalVotes}</div>
-                    <button class="edit-trigger" onclick="editUser('${p.id}','${p.name}',event)">עריכה</button>` : ''}
+        <div style="font-weight:bold; width:100%">${p.name}</div>
+        ${isAdmin ? `<div style="font-size:11px; color:#666; margin-bottom:5px">הצבעות: ${voteCount}</div>` : ''}
+        
+        <div class="action-row">
+          <button class="reason-btn" onclick="handleReason('${p.id}', '${p.name}', ${JSON.stringify(p.reasons||[])})">
+            💬 ${isAdmin ? (p.reasons?.length || 0) : 'הוסף סיבה'}
+          </button>
+          
+          ${isAdmin ? `
+            <button class="admin-btn" onclick="editUser('${p.id}', '${p.name}')">✏️</button>
+            <button class="admin-btn" style="background:#f8d7da; color:#721c24; border-color:#f5c6cb" onclick="deleteUser('${p.id}')">✕</button>
+          ` : ''}
+        </div>
       `;
+      
+      card.innerHTML = html;
       grid.appendChild(card);
     });
   }
 
-  // --- Actions ---
+  // --- Logic Functions ---
+
   async function toggleVote(id) {
     let newVotes = [...myVotes];
-    newVotes = newVotes.includes(id) ? newVotes.filter(v => v !== id) : [...newVotes, id];
+    if (newVotes.includes(id)) {
+      newVotes = newVotes.filter(v => v !== id);
+    } else {
+      newVotes.push(id);
+    }
     await setDoc(doc(db, "votes", myId), { targets: newVotes });
   }
 
-  async function addPersonPrompt() {
-    const name = prompt("שם המשתמש החדש:");
-    if(!name) return;
-    // For phone simplicity, we use the default UI-Avatar unless you want to add a file input modal
-    // To keep it clean, I'll add the person with a random avatar.
-    await addDoc(collection(db, "people"), { name, img: "" });
-  }
+  // 1. Add User Flow
+  window.initiateAddUser = () => {
+    tempName = prompt("שם המשתמש החדש:");
+    if (!tempName) return;
+    // Trigger file input click
+    document.getElementById("imgUpload").click();
+  };
 
-  window.editUser = async (id, oldName, e) => {
-    e.stopPropagation();
-    const action = prompt("הקלד 'save' לשינוי שם, או 'remove' למחיקה:", oldName);
-    if(action === 'remove') {
-      if(confirm("למחוק?")) await deleteDoc(doc(db, "people", id));
-    } else if(action && action !== oldName) {
-      await updateDoc(doc(db, "people", id), { name: action });
+  // 2. Process Image & Save
+  window.processNewUser = async () => {
+    const fileInput = document.getElementById("imgUpload");
+    const file = fileInput.files[0];
+    
+    if (file) {
+      log("מעבד תמונה...");
+      const imgBase64 = await resizeImg(file);
+      await addDoc(collection(db, "people"), { name: tempName, img: imgBase64 });
+    } else {
+      await addDoc(collection(db, "people"), { name: tempName, img: "" });
+    }
+    
+    log("משתמש נוסף בהצלחה!");
+    fileInput.value = ""; // Reset
+  };
+
+  // 3. Reasons Logic
+  window.handleReason = async (id, name, currentReasons) => {
+    if (isAdmin) {
+      // Admin sees list
+      if (!currentReasons || currentReasons.length === 0) return alert("אין סיבות רשומות.");
+      alert(`סיבות עבור ${name}:\n\n- ${currentReasons.join("\n- ")}`);
+    } else {
+      // User adds reason
+      const reason = prompt(`למה ${name} לא מגיע/ה?`);
+      if (reason) {
+        await updateDoc(doc(db, "people", id), {
+          reasons: arrayUnion(reason)
+        });
+        alert("הסיבה נשמרה");
+      }
     }
   };
 
-  // --- Absence Reasons (Hold Feature) ---
-  function startHold(person, e) {
-    pressTimer = window.setTimeout(async () => {
-      if(isAdmin) {
-        const reasons = person.reasons || [];
-        alert(`סיבות היעדרות עבור ${person.name}:\n\n${reasons.length ? reasons.join("\n") : "אין סיבות רשומות"}`);
-      } else {
-        const reason = prompt(`מדוע ${person.name} חסר/ה?`);
-        if(reason) {
-          await updateDoc(doc(db, "people", person.id), {
-            reasons: arrayUnion(reason)
-          });
-          alert("הסיבה נשמרה");
-        }
-      }
-    }, 1000); // 1 second hold
+  // 4. Admin Edit/Delete
+  window.editUser = async (id, oldName) => {
+    const newName = prompt("ערוך שם:", oldName);
+    if (newName && newName !== oldName) {
+      await updateDoc(doc(db, "people", id), { name: newName });
+    }
+  };
+
+  window.deleteUser = async (id) => {
+    if (confirm("למחוק משתמש זה?")) {
+      await deleteDoc(doc(db, "people", id));
+    }
+  };
+
+  // Utility: Image Resize
+  function resizeImg(file) {
+    return new Promise(res => {
+      const r = new FileReader();
+      r.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement("canvas");
+          const m = 200; // slightly larger for better quality
+          let w = img.width, h = img.height;
+          if(w > h) { if(w > m) { h *= m/w; w = m; } } else { if(h > m) { w *= m/h; h = m; } }
+          canvas.width = w; canvas.height = h;
+          canvas.getContext("2d").drawImage(img, 0,0,w,h);
+          res(canvas.toDataURL("image/jpeg", 0.7));
+        };
+        img.src = e.target.result;
+      };
+      r.readAsDataURL(file);
+    });
   }
-
-  function clearHold() { clearTimeout(pressTimer); }
-
+  
+  function log(m) { document.getElementById("log").innerText = m; }
 </script>
 </body>
 </html>
