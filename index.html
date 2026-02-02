@@ -3,302 +3,191 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Voting App v2</title>
-
+<title>Voting App - Firestore</title>
 <style>
-  /* Basic Reset & Font */
-  * { box-sizing: border-box; }
-  body { font-family: 'Segoe UI', sans-serif; direction: rtl; margin: 0; background: #f4f6f8; padding-bottom: 200px; }
-
-  /* Layout */
-  .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 15px; margin-top: 20px; }
-
-  /* Card Styles */
+  body { font-family: 'Segoe UI', sans-serif; direction: rtl; margin: 0; background: #f0f2f5; padding-bottom: 100px; }
+  .container { max-width: 500px; margin: 0 auto; padding: 15px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; margin-top: 15px; }
+  
   .card { 
-    background: white; border-radius: 12px; padding: 15px; text-align: center; 
-    box-shadow: 0 2px 5px rgba(0,0,0,0.05); position: relative; cursor: pointer;
-    border: 2px solid transparent; transition: all 0.2s;
+    background: white; border-radius: 12px; padding: 10px; text-align: center; 
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1); cursor: pointer; position: relative; border: 2px solid transparent;
   }
-  .card.selected { border-color: #28a745; background: #eefff0; }
-  .card img { width: 80px; height: 80px; border-radius: 50%; object-fit: cover; background: #ddd; margin-bottom: 8px; }
+  .card.selected { border-color: #007bff; background: #e7f3ff; }
+  .card img { width: 70px; height: 70px; border-radius: 50%; object-fit: cover; background: #ddd; }
   
-  /* Admin Delete Button (on card) */
-  .delete-btn {
-    position: absolute; top: 5px; right: 5px; background: #ff4444; color: white;
-    width: 24px; height: 24px; border-radius: 50%; text-align: center; line-height: 24px;
-    font-size: 14px; cursor: pointer; display: none; z-index: 10;
-  }
-  .delete-btn:hover { background: #cc0000; }
+  .admin-tools { position: absolute; top: 5px; left: 5px; display: flex; gap: 5px; }
+  .btn-small { background: rgba(0,0,0,0.5); color: white; border: none; border-radius: 4px; padding: 2px 5px; font-size: 10px; cursor: pointer; }
 
-  /* Inputs & Buttons */
-  button { 
-    padding: 12px; width: 100%; border: none; border-radius: 8px; 
-    background: #007bff; color: white; font-size: 16px; margin-bottom: 10px; cursor: pointer;
-  }
-  button.secondary { background: #6c757d; }
-  button.danger { background: #dc3545; }
-  input { width: 100%; padding: 10px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 8px; }
+  .panel { background: white; padding: 15px; border-radius: 10px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+  button { width: 100%; padding: 12px; margin-top: 8px; border: none; border-radius: 6px; cursor: pointer; background: #007bff; color: white; }
+  input { width: 100%; padding: 10px; margin-top: 5px; border: 1px solid #ccc; border-radius: 6px; }
   
-  /* Console Log Box */
-  #console-log {
-    position: fixed; bottom: 0; left: 0; right: 0; height: 150px;
-    background: #333; color: #0f0; font-family: monospace; font-size: 12px;
-    padding: 10px; overflow-y: scroll; border-top: 2px solid #555;
-    z-index: 9999; opacity: 0.9; text-align: left; direction: ltr;
-  }
-
+  #log { position: fixed; bottom: 0; left: 0; right: 0; height: 120px; background: #222; color: #0f0; font-family: monospace; font-size: 11px; overflow-y: auto; padding: 10px; z-index: 1000; text-align: left; direction: ltr; }
   .hidden { display: none; }
 </style>
 </head>
 <body>
 
 <div class="container">
-  <h2 id="pageTitle" style="text-align:center">התחברות</h2>
+  <h2 id="viewTitle" style="text-align:center">כניסה למערכת</h2>
 
   <div id="loginView">
-    <button onclick="window.appLogin('user')">כניסת מצביע</button>
-    <button class="secondary" onclick="window.appLogin('admin')">כניסת מנהל</button>
+    <button onclick="login('user')">כניסת מצביע</button>
+    <button style="background:#6c757d" onclick="login('admin')">כניסת מנהל</button>
   </div>
 
   <div id="appView" class="hidden">
-    
-    <div id="adminPanel" class="hidden" style="background: white; padding: 15px; border-radius: 10px; margin-bottom: 20px;">
-      <h3>ניהול</h3>
-      <input id="newName" placeholder="שם מלא">
-      
-      <label style="display:block; margin-bottom:10px; background:#eee; padding:10px; border-radius:8px; text-align:center;">
-        📷 בחר תמונה (לחץ כאן)
-        <input type="file" id="fileInput" accept="image/*" style="display:none">
-      </label>
-      
-      <button onclick="window.addPersonWithImage()">הוסף אדם</button>
-      
-      <div style="margin-top:15px; border-top:1px solid #eee; padding-top:10px;">
-        <button class="danger" onclick="window.clearVotes()">♻ אפס הצבעות בלבד</button>
-      </div>
-
-      <p>סטטוס: <span id="statusText">ממתין...</span></p>
+    <div id="adminPanel" class="panel hidden">
+      <strong>הוספת מועמד</strong>
+      <input id="nameIn" placeholder="שם המועמד">
+      <input type="file" id="fileIn" accept="image/*" style="margin-top:10px">
+      <button onclick="addPerson()">שמור מועמד</button>
+      <button style="background:#dc3545" onclick="clearVotes()">איפוס הצבעות בלבד</button>
     </div>
 
     <div id="grid" class="grid"></div>
   </div>
 </div>
 
-<div id="console-log">Logs will appear here...<br></div>
+<div id="log">Logs started (Firestore)...<br></div>
 
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-  import { getDatabase, ref, push, set, onValue, remove } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+  import { getFirestore, collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc, getDocs, writeBatch, query, where } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
   import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
-  // --- 1. Custom Logger (To see errors on phone) ---
-  const logBox = document.getElementById("console-log");
-  function log(msg, isError = false) {
-    const p = document.createElement("div");
-    p.style.color = isError ? "#ff6b6b" : "#0f0";
-    p.textContent = `> ${msg}`;
-    logBox.appendChild(p);
-    logBox.scrollTop = logBox.scrollHeight;
-    console.log(msg);
-  }
-  window.onerror = function(msg) { log("SYS ERROR: " + msg, true); };
+  const logBox = document.getElementById("log");
+  function log(m) { logBox.innerHTML += `> ${m}<br>`; logBox.scrollTop = logBox.scrollHeight; }
 
-  // --- 2. Firebase Config ---
   const firebaseConfig = {
     apiKey: "AIzaSyCqJpALniocZnIiA-tsHd6VHp1sODOBMjU",
     authDomain: "mazal-63e38.firebaseapp.com",
     projectId: "mazal-63e38",
-    storageBucket: "mazal-63e38.firebasestorage.app",
+    storageBucket: "mazal-63e38.appspot.com",
     messagingSenderId: "262143581901",
-    appId: "1:262143581901:web:43934f7271f9b8f9bad384",
-    measurementId: "G-B3EHF7MM91",
-    // Ensure this URL is 100% correct. If your DB is in Europe, it looks different.
-    databaseURL: "https://mazal-63e38-default-rtdb.firebaseio.com"
+    appId: "1:262143581901:web:43934f7271f9b8f9bad384"
   };
 
-  let db, auth, userId, userRole;
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+  const auth = getAuth(app);
+  
+  let myId, role, myCurrentVoteDocId;
 
-  try {
-    const app = initializeApp(firebaseConfig);
-    db = getDatabase(app);
-    auth = getAuth(app);
-    log("Firebase Initialized");
-  } catch (e) {
-    log("Firebase Init Failed: " + e.message, true);
-  }
+  signInAnonymously(auth).catch(e => log("Auth Error: " + e.message));
+  onAuthStateChanged(auth, u => { if(u) { myId = u.uid; log("Connected to Firestore"); }});
 
-  // --- 3. Auth ---
-  signInAnonymously(auth).catch(e => log("Auth Error: " + e.message, true));
-
-  onAuthStateChanged(auth, (user) => {
-    if (user) {
-      userId = user.uid;
-      log("Logged in as: " + userId.slice(0,5) + "...");
-    } else {
-      log("User logged out");
-    }
-  });
-
-  // --- 4. Global Functions ---
-
-  window.appLogin = function(role) {
-    if (role === 'admin') {
-      const pass = prompt("סיסמה:");
-      if (pass !== "1234") return alert("סיסמה שגויה");
-      document.getElementById("adminPanel").classList.remove("hidden");
-    }
-    userRole = role;
+  window.login = (r) => {
+    if(r === 'admin' && prompt("סיסמה:") !== "1234") return;
+    role = r;
     document.getElementById("loginView").classList.add("hidden");
     document.getElementById("appView").classList.remove("hidden");
-    document.getElementById("pageTitle").innerText = role === 'admin' ? "ממשק מנהל" : "הצבעה";
-    
-    // Start Listening to DB
-    startListening();
+    if(r === 'admin') document.getElementById("adminPanel").classList.remove("hidden");
+    startSync();
   };
 
-  window.addPersonWithImage = function() {
-    const name = document.getElementById("newName").value;
-    const fileInput = document.getElementById("fileInput");
+  window.addPerson = async () => {
+    const name = document.getElementById("nameIn").value;
+    const file = document.getElementById("fileIn").files[0];
+    if(!name) return alert("הכנס שם");
     
-    if (!name) return alert("חסר שם");
-    
-    // If user selected a file, resize and upload it
-    if (fileInput.files && fileInput.files[0]) {
-      log("Processing image...");
-      resizeImage(fileInput.files[0], (base64Img) => {
-        savePersonToDB(name, base64Img);
-      });
-    } else {
-      // No image, save with default
-      savePersonToDB(name, "");
-    }
+    let imgBase64 = "";
+    if(file) imgBase64 = await resizeImg(file);
+
+    try {
+      await addDoc(collection(db, "people"), { name, img: imgBase64 });
+      log("Person added to Firestore");
+      document.getElementById("nameIn").value = "";
+    } catch(e) { log("Add Error: " + e.message); }
   };
 
-  function savePersonToDB(name, imgData) {
-    log("Saving to DB...");
-    push(ref(db, "people"), {
-      name: name,
-      img: imgData
-    }).then(() => {
-      log("Success! Person added.");
-      document.getElementById("newName").value = "";
-      document.getElementById("fileInput").value = ""; // Clear file
-    }).catch(e => {
-      log("DB Write Error: " + e.message, true);
-      alert("שגיאה בשמירה: בדוק את הלוג למטה");
-    });
-  }
-
-  // Helper to resize image so it fits in Realtime Database
-  function resizeImage(file, callback) {
-    const reader = new FileReader();
-    reader.onload = function(e) {
-      const img = new Image();
-      img.onload = function() {
-        const canvas = document.createElement("canvas");
-        const ctx = canvas.getContext("2d");
-        
-        // Resize to max 150px (keep it small for speed)
-        const maxSize = 150;
-        let width = img.width;
-        let height = img.height;
-        
-        if (width > height) {
-          if (width > maxSize) { height *= maxSize / width; width = maxSize; }
-        } else {
-          if (height > maxSize) { width *= maxSize / height; height = maxSize; }
-        }
-        
-        canvas.width = width;
-        canvas.height = height;
-        ctx.drawImage(img, 0, 0, width, height);
-        
-        // Convert to Base64 JPEG
-        callback(canvas.toDataURL("image/jpeg", 0.7)); 
-      };
-      img.src = e.target.result;
-    };
-    reader.readAsDataURL(file);
-  }
-
-  window.removePerson = function(id, e) {
-    e.stopPropagation(); // Stop click from triggering "Vote"
-    if (!confirm("למחוק אדם זה לצמיתות?")) return;
-    
-    remove(ref(db, "people/" + id))
-      .then(() => log("Person removed"))
-      .catch(e => log("Remove failed: " + e.message, true));
-  };
-
-  window.clearVotes = function() {
-    if (!confirm("האם לאפס את כל ההצבעות? (האנשים יישארו)")) return;
-    set(ref(db, "votes"), {})
-      .then(() => log("Votes cleared"))
-      .catch(e => log("Clear failed: " + e.message, true));
-  };
-
-  window.toggleVote = function(id) {
-    if (userRole !== 'user') return;
-    
-    // We need to know current vote to toggle, handled in rendering, 
-    // but here we just blindly set. Ideally we read state, but simple set is fine.
-    // To implement "Toggle", we check the visual class or local state.
-    // Let's keep it simple: Just set the vote. 
-    // If you want true toggle (unvote), we need to read first.
-    // Assuming simple switching for now based on your request.
-    
-    set(ref(db, "votes/" + userId), id);
-  };
-
-  // --- 5. Listening & Rendering ---
-  function startListening() {
-    log("Listening for data...");
-    
-    onValue(ref(db), (snap) => {
-      const data = snap.val() || {};
-      const people = data.people || {};
-      const votes = data.votes || {};
+  function startSync() {
+    // Sync People
+    onSnapshot(collection(db, "people"), (snap) => {
+      const people = [];
+      snap.forEach(d => people.push({ id: d.id, ...d.data() }));
       
-      render(people, votes);
-    }, (error) => {
-      log("Listen Error: " + error.message, true); // <--- THIS WILL TELL YOU WHY IT DOESN'T SYNC
+      // Sync Votes
+      onSnapshot(collection(db, "votes"), (vSnap) => {
+        const votes = {};
+        vSnap.forEach(v => { votes[v.id] = v.data().votedFor; });
+        render(people, votes);
+      });
     });
   }
 
   function render(people, votes) {
     const grid = document.getElementById("grid");
     grid.innerHTML = "";
-    
-    const myVote = votes[userId];
+    const myVotedId = votes[myId];
 
-    Object.entries(people).forEach(([id, person]) => {
-      // Calculate vote count
-      const count = Object.values(votes).filter(v => v === id).length;
-      
-      const div = document.createElement("div");
-      div.className = "card " + (myVote === id ? "selected" : "");
-      div.onclick = () => window.toggleVote(id);
-      
-      // Default avatar if no image
-      const imgSrc = person.img ? person.img : "https://ui-avatars.com/api/?background=random&name=" + person.name;
+    people.forEach(p => {
+      const count = Object.values(votes).filter(v => v === p.id).length;
+      const card = document.createElement("div");
+      card.className = `card ${myVotedId === p.id ? 'selected' : ''}`;
+      card.onclick = () => castVote(p.id);
 
-      let html = `
-        <img src="${imgSrc}">
-        <div style="font-weight:bold">${person.name}</div>
+      card.innerHTML = `
+        <img src="${p.img || 'https://ui-avatars.com/api/?name='+p.name}">
+        <div><strong>${p.name}</strong></div>
+        ${role === 'admin' ? `<div>⭐ ${count}</div>
+          <div class="admin-tools">
+            <button class="btn-small" onclick="editPerson('${p.id}', '${p.name}', event)">✏️</button>
+            <button class="btn-small" style="background:red" onclick="deletePerson('${p.id}', event)">✕</button>
+          </div>` : ''}
       `;
+      grid.appendChild(card);
+    });
+  }
 
-      if (userRole === 'admin') {
-        html += `<div style="color:#666; font-size:12px; margin-top:5px;">הצבעות: ${count}</div>`;
-        // Add Delete Button
-        html += `<div class="delete-btn" style="display:block" onclick="window.removePerson('${id}', event)">✕</div>`;
-      }
+  window.castVote = async (pId) => {
+    if(role !== 'user') return;
+    try {
+      await setDoc(doc(db, "votes", myId), { votedFor: pId });
+      log("Vote saved");
+    } catch(e) { log("Vote Error: " + e.message); }
+  };
 
-      div.innerHTML = html;
-      grid.appendChild(div);
+  window.deletePerson = async (id, e) => {
+    e.stopPropagation();
+    if(confirm("למחוק?")) await deleteDoc(doc(db, "people", id));
+  };
+
+  window.editPerson = async (id, oldName, e) => {
+    e.stopPropagation();
+    const newName = prompt("שם חדש:", oldName);
+    if(newName) await updateDoc(doc(db, "people", id), { name: newName });
+  };
+
+  window.clearVotes = async () => {
+    if(!confirm("לאפס הצבעות?")) return;
+    const vSnap = await getDocs(collection(db, "votes"));
+    const batch = writeBatch(db);
+    vSnap.forEach(d => batch.delete(d.ref));
+    await batch.commit();
+    log("Votes reset");
+  };
+
+  function resizeImg(file) {
+    return new Promise(res => {
+      const r = new FileReader();
+      r.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement("canvas");
+          const m = 120;
+          let w = img.width, h = img.height;
+          if(w > h) { if(w > m) { h *= m/w; w = m; } } else { if(h > m) { w *= m/h; h = m; } }
+          canvas.width = w; canvas.height = h;
+          canvas.getContext("2d").drawImage(img, 0,0,w,h);
+          res(canvas.toDataURL("image/jpeg", 0.6));
+        };
+        img.src = e.target.result;
+      };
+      r.readAsDataURL(file);
     });
   }
 </script>
-
 </body>
 </html>
