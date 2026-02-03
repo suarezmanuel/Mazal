@@ -45,11 +45,6 @@
     background: #ffebee; color: #d32f2f; border: 1px solid #ffcdd2; 
     border-radius: 8px; padding: 8px 12px; font-weight: bold; cursor: pointer;
   }
-  
-  .reset-votes-btn {
-    background: #fff3e0; color: #ef6c00; border: 1px solid #ffe0b2;
-    border-radius: 8px; padding: 8px 12px; font-weight: bold; cursor: pointer;
-  }
 
   /* --- Grid & Cards --- */
   .container { padding: 15px; max-width: 800px; margin: 0 auto; }
@@ -90,7 +85,6 @@
   <div class="header-top">
     <h2>נוכחות: <span id="pStat">0/0</span></h2>
     <div class="controls">
-      <button class="reset-votes-btn admin-only" onclick="resetVotes()">♻️ איפוס הצבעות</button>
       <button class="delete-group-btn admin-only" onclick="deleteCurrentGroup()">🗑️ מחק קבוצה</button>
       <button id="lockBtn" class="toggle-btn" onclick="toggleAdmin()">🔒</button>
     </div>
@@ -184,10 +178,6 @@
     onSnapshot(collection(db, "groups"), (snap) => {
       groupsData = [];
       snap.forEach(d => groupsData.push({ id: d.id, ...d.data() }));
-      
-      // Feature 1: Lexicographical Sort
-      groupsData.sort((a, b) => a.name.localeCompare(b.name, 'he'));
-      
       updateGroupDropdown();
     });
 
@@ -216,15 +206,7 @@
         sel.innerHTML += `<option value="${g.id}">${g.name}</option>`;
     });
     if(isAdmin) sel.innerHTML += `<option value="ADD_NEW">+ הוסף קבוצה חדשה</option>`;
-    
-    // Attempt to keep selection or fallback to 'all'
-    if (currentVal === 'ADD_NEW') {
-        sel.value = selectedGroupId;
-    } else {
-        // If the group still exists, keep it, otherwise reset
-        const groupExists = groupsData.some(g => g.id === currentVal);
-        sel.value = (currentVal && (groupExists || currentVal === 'all')) ? currentVal : 'all';
-    }
+    sel.value = currentVal || 'all';
   }
 
   window.handleGroupChange = () => {
@@ -261,51 +243,6 @@
     render();
   };
 
-  // Feature 2 & 3: Delete Votes Button Logic
-  window.resetVotes = async () => {
-    if (selectedGroupId === 'all') {
-        if (!confirm("האם לאפס את ההצבעות של כולם? פעולה זו תמחק את כל הסימונים מכל הקבוצות.")) return;
-        
-        const batch = writeBatch(db);
-        // Deleting all vote documents
-        votesData.forEach(v => {
-            batch.delete(doc(db, "votes", v.voter));
-        });
-        await batch.commit();
-    } else {
-        const groupName = groupsData.find(g => g.id === selectedGroupId)?.name || "הקבוצה";
-        if (!confirm(`האם למחוק את ההצבעות של חברי ${groupName} בלבד?`)) return;
-
-        // Find IDs of people in the current group
-        const groupMemberIds = peopleData
-            .filter(p => p.groupId === selectedGroupId)
-            .map(p => p.id);
-
-        if (groupMemberIds.length === 0) return alert("אין חברים בקבוצה זו.");
-
-        const batch = writeBatch(db);
-        let updateCount = 0;
-
-        // Iterate over all votes and remove targets that are in this group
-        votesData.forEach(v => {
-            const originalTargets = v.targets;
-            const newTargets = originalTargets.filter(tId => !groupMemberIds.includes(tId));
-
-            if (originalTargets.length !== newTargets.length) {
-                // If the user voted for someone in this group, update their vote list
-                batch.update(doc(db, "votes", v.voter), { targets: newTargets });
-                updateCount++;
-            }
-        });
-
-        if (updateCount > 0) {
-            await batch.commit();
-        } else {
-            alert("לא נמצאו הצבעות למחיקה בקבוצה זו.");
-        }
-    }
-  };
-
   // --- Core Rendering ---
   window.render = () => {
     const grid = document.getElementById("grid");
@@ -326,14 +263,15 @@
     const voteCounts = {};
     peopleData.forEach(p => voteCounts[p.id] = 0);
     
-    // Accurate calculation across all votes
+    let arrivedCount = 0;
     votesData.forEach(v => {
       v.targets.forEach(tId => {
         if(voteCounts.hasOwnProperty(tId)) voteCounts[tId]++;
+        if(currentViewIds.includes(tId)) arrivedCount++; // Note: Simplified for demonstration
       });
     });
 
-    // Calculate unique arrived (people in current view with > 0 votes)
+    // Accurate arrived count (unique people in current view who have at least 1 vote)
     const uniqueArrived = displayList.filter(p => voteCounts[p.id] > 0).length;
     document.getElementById("pStat").innerText = `${uniqueArrived} / ${displayList.length}`;
 
