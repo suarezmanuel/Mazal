@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Voting System Final</title>
+<title>Voting System with Groups</title>
 <style>
   /* --- Base Styles --- */
   body { font-family: 'Segoe UI', sans-serif; direction: rtl; margin: 0; background: #f0f2f5; user-select: none; padding-bottom: 100px; }
@@ -17,11 +17,16 @@
   .header-top h2 { margin: 0; font-size: 18px; color: #333; }
   
   .controls { display: flex; gap: 8px; align-items: center; }
-  .search-row { display: flex; gap: 8px; }
+  .search-row { display: flex; gap: 8px; flex-wrap: wrap; }
   
   .search-input { 
-    flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 8px; 
+    flex: 1; min-width: 120px; padding: 10px; border: 1px solid #ddd; border-radius: 8px; 
     font-size: 14px; outline: none;
+  }
+
+  .select-group {
+    padding: 10px; border: 1px solid #007bff; border-radius: 8px;
+    background: white; color: #007bff; font-weight: bold; outline: none;
   }
 
   .filter-btn {
@@ -33,9 +38,12 @@
 
   /* --- Admin Buttons --- */
   .toggle-btn { background: none; border: none; font-size: 24px; cursor: pointer; }
+  .admin-only { display: none; }
+  .admin-mode .admin-only { display: inline-block; }
+  
   .delete-all-btn { 
     background: #ffebee; color: #d32f2f; border: 1px solid #ffcdd2; 
-    border-radius: 8px; padding: 5px 12px; font-weight: bold; cursor: pointer;
+    border-radius: 8px; padding: 5px 12px; font-weight: bold; cursor: pointer; margin-left: 5px;
   }
 
   /* --- Grid & Cards --- */
@@ -67,17 +75,21 @@
   .hidden { display: none !important; }
 </style>
 </head>
-<body>
+<body id="mainBody">
 
 <div class="header">
   <div class="header-top">
     <h2>נוכחות: <span id="pStat">0/0</span></h2>
     <div class="controls">
-      <button id="deleteAllBtn" class="delete-all-btn hidden" onclick="clearAllData()">🗑️ איפוס הכל</button>
+      <button class="delete-all-btn admin-only" onclick="deleteUsersInCurrentGroup()">🗑️ מחק קבוצה</button>
       <button id="lockBtn" class="toggle-btn" onclick="toggleAdmin()">🔒</button>
     </div>
   </div>
   <div class="search-row">
+    <select id="groupSelect" class="select-group" onchange="handleGroupChange()">
+        <option value="all">כל הקבוצות</option>
+        <option value="ADD_NEW" class="admin-only">+ הוסף קבוצה חדשה</option>
+    </select>
     <input type="text" id="searchInput" class="search-input" placeholder="חפש שם..." oninput="render()">
     <button id="filterBtn" class="filter-btn" onclick="toggleFilter()">הכל</button>
   </div>
@@ -98,6 +110,16 @@
   </div>
 </div>
 
+<div id="addGroupModal" class="modal-overlay hidden">
+    <div class="modal-box">
+      <div class="modal-header"><span>קבוצה חדשה</span><button onclick="closeModal('addGroupModal')" style="border:none;background:none;font-size:20px;">✕</button></div>
+      <div class="modal-body">
+        <input id="newGroupName" class="modal-input" placeholder="שם הקבוצה">
+      </div>
+      <div class="modal-footer"><button class="modal-btn" onclick="saveNewGroup()">צור קבוצה</button></div>
+    </div>
+  </div>
+
 <div id="reasonsModal" class="modal-overlay hidden">
   <div class="modal-box">
     <div class="modal-header"><span id="reasonsTitle">סיבות</span><button onclick="closeModal('reasonsModal')" style="border:none;background:none;font-size:20px;">✕</button></div>
@@ -111,7 +133,7 @@
 
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-  import { getFirestore, collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc, setDoc, arrayUnion, writeBatch, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+  import { getFirestore, collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc, setDoc, arrayUnion, writeBatch, getDocs, query, where } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
   import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
   const firebaseConfig = {
@@ -127,13 +149,20 @@
   const db = getFirestore(app);
   const auth = getAuth(app);
   
-  let myId, isAdmin = false, myVotes = [], peopleData = [], votesData = [], activePersonId = null, showOnlyAbsent = false;
+  let myId, isAdmin = false, myVotes = [], peopleData = [], votesData = [], groupsData = [], activePersonId = null, showOnlyAbsent = false, selectedGroupId = 'all';
 
-  // --- Auth & Data Sync ---
   signInAnonymously(auth);
   onAuthStateChanged(auth, u => { if(u) { myId = u.uid; startSync(); } });
 
   function startSync() {
+    // Sync Groups
+    onSnapshot(collection(db, "groups"), (snap) => {
+      groupsData = [];
+      snap.forEach(d => groupsData.push({ id: d.id, ...d.data() }));
+      updateGroupDropdown();
+    });
+
+    // Sync People
     onSnapshot(collection(db, "people"), (snap) => {
       peopleData = [];
       snap.forEach(d => peopleData.push({ id: d.id, ...d.data() }));
@@ -141,6 +170,7 @@
       render();
     });
 
+    // Sync Votes
     onSnapshot(collection(db, "votes"), (snap) => {
       votesData = [];
       snap.forEach(v => votesData.push({voter: v.id, targets: v.data().targets || []}));
@@ -150,55 +180,86 @@
     });
   }
 
-  // --- Core Rendering ---
+  function updateGroupDropdown() {
+    const sel = document.getElementById("groupSelect");
+    const val = sel.value;
+    sel.innerHTML = `<option value="all">כל הקבוצות</option>`;
+    groupsData.forEach(g => {
+        sel.innerHTML += `<option value="${g.id}">${g.name}</option>`;
+    });
+    if(isAdmin) sel.innerHTML += `<option value="ADD_NEW">+ הוסף קבוצה חדשה</option>`;
+    sel.value = val;
+  }
+
+  window.handleGroupChange = () => {
+    const val = document.getElementById("groupSelect").value;
+    if (val === "ADD_NEW") {
+        document.getElementById("groupSelect").value = selectedGroupId;
+        document.getElementById("addGroupModal").classList.remove("hidden");
+    } else {
+        selectedGroupId = val;
+        render();
+    }
+  };
+
+  window.saveNewGroup = async () => {
+    const name = document.getElementById("newGroupName").value;
+    if(!name) return;
+    await addDoc(collection(db, "groups"), { name });
+    closeModal('addGroupModal');
+    document.getElementById("newGroupName").value = "";
+  };
+
   window.render = () => {
     const grid = document.getElementById("grid");
     const searchText = document.getElementById("searchInput").value.toLowerCase();
     grid.innerHTML = "";
 
-    // Stats Logic
-    const validPeopleIds = peopleData.map(p => p.id);
-    const votedIds = new Set();
+    // Filter people by group
+    let filteredPeople = (selectedGroupId === 'all') 
+        ? peopleData 
+        : peopleData.filter(p => p.groupId === selectedGroupId);
+
+    // Filter by search
+    if (searchText) {
+        filteredPeople = filteredPeople.filter(p => p.name.toLowerCase().includes(searchText));
+    }
+
+    // Stats Logic based on current filtered set
+    const validPeopleIds = filteredPeople.map(p => p.id);
+    const votedIdsInView = new Set();
     const voteCounts = {};
-    peopleData.forEach(p => voteCounts[p.id] = 0);
     
+    // We calculate votes based on all data but display counts based on current view
+    peopleData.forEach(p => voteCounts[p.id] = 0);
     votesData.forEach(v => {
       v.targets.forEach(tId => {
-        if(validPeopleIds.includes(tId)) {
-          votedIds.add(tId);
-          voteCounts[tId]++;
-        }
+        if(voteCounts.hasOwnProperty(tId)) voteCounts[tId]++;
+        if(validPeopleIds.includes(tId)) votedIdsInView.add(tId);
       });
     });
     
-    document.getElementById("pStat").innerText = `${votedIds.size} / ${peopleData.length}`;
+    document.getElementById("pStat").innerText = `${votedIdsInView.size} / ${filteredPeople.length}`;
 
-    // Admin Add Card
-    if (isAdmin) {
+    if (isAdmin && selectedGroupId !== 'all') {
       const plus = document.createElement("div");
       plus.className = "card"; plus.style.borderStyle = "dashed"; plus.style.borderColor = "#007bff";
       plus.onclick = () => document.getElementById("addUserModal").classList.remove("hidden");
-      plus.innerHTML = `<span style="font-size:40px; color:#007bff">+</span><span style="color:#007bff">הוסף משתמש</span>`;
+      plus.innerHTML = `<span style="font-size:40px; color:#007bff">+</span><span style="color:#007bff">הוסף למשתתף</span>`;
       grid.appendChild(plus);
     }
 
-    // List People
-    peopleData.forEach(p => {
-      const votesForPerson = voteCounts[p.id] || 0;
-      const isSelected = myVotes.includes(p.id);
-
-      // --- FILTERS ---
-      if (searchText && !p.name.toLowerCase().includes(searchText)) return;
-      if (showOnlyAbsent && votesForPerson > 0) return; // Only show people with 0 votes
+    filteredPeople.forEach(p => {
+      if (showOnlyAbsent && voteCounts[p.id] > 0) return;
 
       const card = document.createElement("div");
-      card.className = `card ${isSelected ? 'selected' : ''}`;
+      card.className = `card ${myVotes.includes(p.id) ? 'selected' : ''}`;
       card.onclick = (e) => { if(!e.target.closest('button')) toggleVote(p.id); };
       
       card.innerHTML = `
         <img src="${p.img || 'https://ui-avatars.com/api/?background=random&name='+p.name}">
         <div style="font-weight:bold; font-size:14px;">${p.name}</div>
-        ${isAdmin ? `<div style="font-size:11px; color:#666">🗳️ הצבעות: ${votesForPerson}</div>` : ''}
+        ${isAdmin ? `<div style="font-size:11px; color:#666">🗳️ הצבעות: ${voteCounts[p.id]}</div>` : ''}
         <div class="action-row">
           <button class="reason-btn" onclick="openReasonsModal('${p.id}')">💬 ${p.reasons?.length || 0}</button>
           ${isAdmin ? `<button class="admin-btn" onclick="deleteUser('${p.id}')">✕</button>` : ''}
@@ -207,53 +268,59 @@
     });
   };
 
-  // --- Actions ---
-  async function toggleVote(id) {
-    let newVotes = myVotes.includes(id) ? myVotes.filter(v => v !== id) : [...myVotes, id];
-    await setDoc(doc(db, "votes", myId), { targets: newVotes });
-  }
-
   window.toggleAdmin = () => {
     if (!isAdmin) {
       if (prompt("סיסמה:") !== "1234") return;
       isAdmin = true;
       document.getElementById("lockBtn").innerText = "🔓";
-      document.getElementById("deleteAllBtn").classList.remove("hidden");
+      document.getElementById("mainBody").classList.add("admin-mode");
     } else {
       isAdmin = false;
       document.getElementById("lockBtn").innerText = "🔒";
-      document.getElementById("deleteAllBtn").classList.add("hidden");
+      document.getElementById("mainBody").classList.remove("admin-mode");
     }
+    updateGroupDropdown();
     render();
   };
 
-  window.toggleFilter = () => {
-    showOnlyAbsent = !showOnlyAbsent;
-    document.getElementById("filterBtn").innerText = showOnlyAbsent ? "חסרים" : "הכל";
-    document.getElementById("filterBtn").classList.toggle("active", showOnlyAbsent);
+  window.deleteUsersInCurrentGroup = async () => {
+    if (selectedGroupId === 'all') return alert("בחר קבוצה ספציפית למחיקה");
+    if (!confirm("למחוק את כל המשתמשים בקבוצה זו ואת הקבוצה עצמה?")) return;
+
+    const batch = writeBatch(db);
+    // Delete people in group
+    const usersInGroup = peopleData.filter(p => p.groupId === selectedGroupId);
+    usersInGroup.forEach(u => batch.delete(doc(db, "people", u.id)));
+    
+    // Delete group document
+    batch.delete(doc(db, "groups", selectedGroupId));
+    
+    await batch.commit();
+    selectedGroupId = 'all';
+    document.getElementById("groupSelect").value = 'all';
     render();
   };
 
   window.saveNewUser = async () => {
     const name = document.getElementById("newUserName").value;
     const fileInput = document.getElementById("newUserFile");
-    if(!name) return;
+    if(!name || selectedGroupId === 'all') return alert("בחר קבוצה תחילה");
     const img = fileInput.files[0] ? await resizeImg(fileInput.files[0]) : "";
-    await addDoc(collection(db, "people"), { name, img, reasons: [] });
+    await addDoc(collection(db, "people"), { name, img, reasons: [], groupId: selectedGroupId });
     closeModal('addUserModal');
-    fileInput.value = "";
   };
 
-  window.clearAllData = async () => {
-    if(!confirm("אפס הכל? (מוחק את כל ההצבעות והסיבות של כולם)")) return;
-    const batch = writeBatch(db);
-    const vSnap = await getDocs(collection(db, "votes"));
-    vSnap.forEach(d => batch.delete(d.ref));
-    peopleData.forEach(p => batch.update(doc(db, "people", p.id), { reasons: [] }));
-    await batch.commit();
+  // Rest of the utility functions (toggleVote, openReasonsModal, etc.) remain same as your original script
+  async function toggleVote(id) {
+    let newVotes = myVotes.includes(id) ? myVotes.filter(v => v !== id) : [...myVotes, id];
+    await setDoc(doc(db, "votes", myId), { targets: newVotes });
+  }
+  window.toggleFilter = () => {
+    showOnlyAbsent = !showOnlyAbsent;
+    document.getElementById("filterBtn").innerText = showOnlyAbsent ? "חסרים" : "הכל";
+    document.getElementById("filterBtn").classList.toggle("active", showOnlyAbsent);
+    render();
   };
-
-  // --- Reason Modals ---
   window.openReasonsModal = (id) => {
     activePersonId = id;
     const p = peopleData.find(x => x.id === id);
@@ -262,18 +329,14 @@
     list.innerHTML = p.reasons?.length ? p.reasons.map(r => `<div class="reason-item">${r}</div>`).join('') : "אין סיבות רשומות";
     document.getElementById("reasonsModal").classList.remove("hidden");
   };
-
   window.addReason = async () => {
     const val = document.getElementById("newReasonInput").value.trim();
     if(!val) return;
     await updateDoc(doc(db, "people", activePersonId), { reasons: arrayUnion(val) });
     document.getElementById("newReasonInput").value = "";
   };
-
   window.deleteUser = async (id) => { if(confirm("למחוק משתמש זה?")) await deleteDoc(doc(db, "people", id)); };
   window.closeModal = (id) => document.getElementById(id).classList.add("hidden");
-
-  // --- Utility ---
   function resizeImg(file) {
     return new Promise(res => {
       const r = new FileReader();
