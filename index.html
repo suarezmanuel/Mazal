@@ -252,6 +252,22 @@
     }
   };
 
+
+  window.resetVotes = async () => {
+    const isAll = selectedGroupId === 'all';
+    if (!confirm(isAll ? "איפוס כל המערכת?" : "איפוס קבוצה זו?")) return;
+    const batch = writeBatch(db);
+    const targetPeople = isAll ? peopleData : peopleData.filter(p => p.groupId === selectedGroupId);
+    const targetIds = targetPeople.map(p => p.id);
+    targetPeople.forEach(p => batch.update(doc(db, "people", p.id), { reasons: [] }));
+    votesData.forEach(v => {
+        const newTargets = v.targets.filter(tId => !targetIds.includes(tId));
+        if (newTargets.length !== v.targets.length) batch.update(doc(db, "votes", v.voter), { targets: newTargets });
+    });
+    await batch.commit();
+  };
+
+  // --- UPDATED REPORT LOGIC ---
     window.renderMissingImage = () => {
     const reporterName = prompt("שם המדווח:");
     if (!reporterName) return;
@@ -273,34 +289,33 @@
     const missingList = targetPeople.filter(p => voteCounts[p.id] === 0);
     
     // Stats
-    const totalCount = targetPeople.length;     // Total
-    const presentCount = targetPeople.length - missingList.length; // Present
-    const missingCount = missingList.length;    // Missing
+    const totalCount = targetPeople.length;
+    const presentCount = targetPeople.length - missingList.length;
+    const missingCount = missingList.length;
 
-    // --- 3. Canvas Setup (Notebook Style) ---
+    // --- 3. Canvas Setup ---
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
     
     // Dimensions
-    const topMargin = 120; // Big space at top
-    const rightMargin = 100; // Big vertical space on right
-    const rowHeight = 50;  // Height of notebook lines
-    const headerRows = 6;  // Space for stats/date before list starts
+    const topMargin = 140; // Space at top for header info
+    const rightMargin = 100; // Sidebar space
+    const rowHeight = 50;  
     
-    // Calculate total height based on content
-    const totalContentRows = headerRows + missingList.length + 4; // +4 for footer buffer
+    // Calculate Height: Header + Stats lines + List + Footer Buffer
+    // Added extra buffer (+8 rows) to ensure footer is far from bottom edge
+    const totalContentRows = 5 + missingList.length + 8; 
     canvas.width = 1000;
-    canvas.height = Math.max(800, topMargin + (totalContentRows * rowHeight));
+    canvas.height = Math.max(900, topMargin + (totalContentRows * rowHeight));
 
     // --- 4. Background & Notebook Lines ---
-    // White Paper Background
     ctx.fillStyle = '#fdfbf7'; 
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     // Horizontal Lines (Light Blue)
     ctx.strokeStyle = '#a4c2f4'; 
     ctx.lineWidth = 2;
-    for (let y = topMargin; y < canvas.height; y += rowHeight) {
+    for (let y = topMargin; y < canvas.height - 100; y += rowHeight) {
         ctx.beginPath();
         ctx.moveTo(0, y);
         ctx.lineTo(canvas.width, y);
@@ -315,73 +330,88 @@
     ctx.lineTo(canvas.width - rightMargin, canvas.height);
     ctx.stroke();
 
-    // --- 5. Text Configuration ---
-    const contentRight = canvas.width - rightMargin - 20; // Text starts slightly left of the red line
+    // --- 5. Content Configuration ---
+    const contentRight = canvas.width - rightMargin - 20; 
     const dateObj = new Date();
     const dateStr = `${dateObj.getDate()}/${dateObj.getMonth()+1}/${dateObj.getFullYear()}`;
     const timeStr = `${dateObj.getHours()}:${dateObj.getMinutes().toString().padStart(2,'0')}`;
 
-    ctx.textAlign = 'right';
+    // --- A. Top Left Info (Date/Time/Location) ---
+    ctx.textAlign = 'left';
+    ctx.font = 'bold 24px Segoe UI';
+    ctx.fillStyle = '#2980b9'; // Soft Blue
     
-    // -- Stats Block (Soft Colors) --
-    let currentLineY = topMargin + rowHeight - 10; // Sit text on the line
+    // Positioned in the top white margin area
+    ctx.fillText(`תאריך: ${dateStr}`, 40, 50);
+    ctx.fillText(`שעה: ${timeStr}`, 40, 85);
+    ctx.fillText(`מיקום: ${location}`, 40, 120);
 
-    // Line 1: Total (Matzan)
+    // --- B. Top Right Stats ---
+    ctx.textAlign = 'right';
+    let currentLineY = topMargin + rowHeight - 12; // Start on first line
+
+    // Line 1: Total
     ctx.font = 'bold 28px Segoe UI';
-    ctx.fillStyle = '#2d3436'; // Soft Black
+    ctx.fillStyle = '#2d3436'; 
     ctx.fillText(`מצן: ${totalCount}`, contentRight, currentLineY);
     
-    // Line 2: Present (Nochachim)
+    // Line 2: Present
     currentLineY += rowHeight;
-    ctx.fillStyle = '#27ae60'; // Soft Green (Not neon)
+    ctx.fillStyle = '#27ae60'; 
     ctx.fillText(`נוכחים: ${presentCount}`, contentRight, currentLineY);
 
-    // Line 3: Missing (Hasrim)
+    // Line 3: Missing
     currentLineY += rowHeight;
-    ctx.fillStyle = '#c0392b'; // Soft Brick Red
-    ctx.fillText(`חסרים: ${targetPeople.length - presentCount}`, contentRight, currentLineY);
+    ctx.fillStyle = '#c0392b'; 
+    ctx.fillText(`חסרים: ${missingCount}`, contentRight, currentLineY);
 
-    // -- Info Block --
-    currentLineY += rowHeight;
-    ctx.fillStyle = '#2980b9'; // Soft Blue
-    ctx.fillText(`תאריך: ${dateStr} | שעה: ${timeStr}`, contentRight, currentLineY);
-    
-    currentLineY += rowHeight;
-    ctx.fillText(`מיקום: ${location}`, contentRight, currentLineY);
-
-    // -- Headers for List --
-    currentLineY += rowHeight + 10; // Add a little gap
+    // --- C. Column Headers ---
+    currentLineY += rowHeight * 1.5; // Gap before list
     ctx.fillStyle = '#2d3436';
-    ctx.font = 'bold 30px Segoe UI';
-    ctx.fillText("רשימת חסרים:", contentRight, currentLineY);
+    ctx.font = 'bold 28px Segoe UI';
     
-    // -- The List --
+    // Draw Headers
+    ctx.fillText("שם", contentRight, currentLineY);
+    ctx.fillText("סיבה", contentRight - 350, currentLineY);
+    
+    // Underline headers
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = '#2d3436';
+    ctx.beginPath();
+    ctx.moveTo(contentRight, currentLineY + 5);
+    ctx.lineTo(contentRight - 40, currentLineY + 5);
+    ctx.moveTo(contentRight - 350, currentLineY + 5);
+    ctx.lineTo(contentRight - 410, currentLineY + 5);
+    ctx.stroke();
+
+    // --- D. The List ---
     ctx.font = '26px Segoe UI';
     missingList.forEach((p) => {
         currentLineY += rowHeight;
         
         // Name
-        ctx.fillStyle = '#2d3436'; // Dark Grey
+        ctx.fillStyle = '#2d3436'; 
         ctx.textAlign = 'right';
         ctx.fillText(p.name, contentRight, currentLineY - 10);
         
-        // Reason (if exists) - Drawn in a softer color to the left
+        // Reason
         if (p.reasons && p.reasons.length > 0) {
             ctx.fillStyle = '#7f8c8d'; // Grey
             let rText = p.reasons.join(", ");
             if (rText.length > 35) rText = rText.substring(0,35) + "...";
-            ctx.fillText(`(${rText})`, contentRight - 300, currentLineY - 10);
+            ctx.fillText(rText, contentRight - 350, currentLineY - 10);
         }
     });
 
-    // --- 6. Footer: Author Info (Big & Clear) ---
-    const footerY = currentLineY + (rowHeight * 3);
+    // --- E. Footer: Author Info ---
+    // Position relatively, but ensure it's not at the very bottom
+    // We utilize the extra buffer we added to canvas height
+    const footerY = currentLineY + 150; 
     
-    ctx.fillStyle = '#2c3e50'; // Dark Blue/Grey
-    ctx.font = 'bold 40px Segoe UI'; // Much Bigger
     ctx.textAlign = 'center';
+    ctx.fillStyle = '#2c3e50'; 
+    ctx.font = 'bold 40px Segoe UI';
     
-    // Draw a box or line for emphasis (Optional, keeps it clean)
     ctx.fillText(`מדווח: ${reporterName}`, canvas.width / 2, footerY);
     
     if (reporterId) {
@@ -390,29 +420,13 @@
         ctx.fillText(`ID: ${reporterId}`, canvas.width / 2, footerY + 50);
     }
 
-    // --- 7. Download ---
+    // --- Download ---
     const link = document.createElement('a');
     link.download = `notebook_report_${dateStr.replace(/\//g,'-')}.png`;
     link.href = canvas.toDataURL();
     link.click();
   };
 
-  window.resetVotes = async () => {
-    const isAll = selectedGroupId === 'all';
-    if (!confirm(isAll ? "איפוס כל המערכת?" : "איפוס קבוצה זו?")) return;
-    const batch = writeBatch(db);
-    const targetPeople = isAll ? peopleData : peopleData.filter(p => p.groupId === selectedGroupId);
-    const targetIds = targetPeople.map(p => p.id);
-    targetPeople.forEach(p => batch.update(doc(db, "people", p.id), { reasons: [] }));
-    votesData.forEach(v => {
-        const newTargets = v.targets.filter(tId => !targetIds.includes(tId));
-        if (newTargets.length !== v.targets.length) batch.update(doc(db, "votes", v.voter), { targets: newTargets });
-    });
-    await batch.commit();
-  };
-
-  // --- UPDATED REPORT LOGIC ---
-  
 
   window.render = () => {
     const grid = document.getElementById("grid");
