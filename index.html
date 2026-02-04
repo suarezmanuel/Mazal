@@ -279,7 +279,7 @@
         ? peopleData 
         : peopleData.filter(p => p.groupId === selectedGroupId);
 
-    // --- 2. Calculate Stats ---
+    // --- 2. Stats ---
     const voteCounts = {};
     targetPeople.forEach(p => voteCounts[p.id] = 0);
     votesData.forEach(v => v.targets.forEach(tId => { 
@@ -288,136 +288,128 @@
 
     const missingList = targetPeople.filter(p => voteCounts[p.id] === 0);
     
-    // Stats
     const totalCount = targetPeople.length;
     const presentCount = targetPeople.length - missingList.length;
     const missingCount = missingList.length;
 
-    // --- 3. Canvas Setup ---
+    // --- 3. Dimensions Setup ---
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
-    
-    // Dimensions
-    const topMargin = 140; // Space at top for header info
-    const rightMargin = 100; // Sidebar space
+
+    const topMargin = 160;     // White space at top for ALL stats
+    const bottomMargin = 150;  // White space at bottom for Reporter info
+    const rightMargin = 100;   
     const rowHeight = 50;  
     
-    // Calculate Height: Header + Stats lines + List + Footer Buffer
-    // Added extra buffer (+8 rows) to ensure footer is far from bottom edge
-    const totalContentRows = 5 + missingList.length + 8; 
-    canvas.width = 1000;
-    canvas.height = Math.max(900, topMargin + (totalContentRows * rowHeight));
+    // Rows: Header Row + List Items + 1 Empty Row
+    const notebookRows = 1 + missingList.length + 1; 
 
-    // --- 4. Background & Notebook Lines ---
+    canvas.width = 1000;
+    canvas.height = topMargin + (notebookRows * rowHeight) + bottomMargin;
+
+    // --- 4. Backgrounds ---
+    // Fill Main Background
     ctx.fillStyle = '#fdfbf7'; 
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Horizontal Lines (Light Blue)
-    ctx.strokeStyle = '#a4c2f4'; 
+    // --- 5. Draw Notebook Lines ---
+    // Only draw lines in the middle section
+    const linesStart = topMargin;
+    const linesEnd = topMargin + (notebookRows * rowHeight);
+
     ctx.lineWidth = 2;
-    for (let y = topMargin; y < canvas.height - 100; y += rowHeight) {
+    ctx.strokeStyle = '#a4c2f4'; // Light Blue
+
+    for (let y = linesStart; y <= linesEnd; y += rowHeight) {
         ctx.beginPath();
         ctx.moveTo(0, y);
         ctx.lineTo(canvas.width, y);
         ctx.stroke();
     }
 
-    // Vertical Margin Line (Soft Red/Pink)
-    ctx.strokeStyle = '#e0a6aa';
+    // Vertical Margin Line
+    ctx.strokeStyle = '#e0a6aa'; // Soft Red
     ctx.lineWidth = 3;
     ctx.beginPath();
     ctx.moveTo(canvas.width - rightMargin, 0);
     ctx.lineTo(canvas.width - rightMargin, canvas.height);
     ctx.stroke();
 
-    // --- 5. Content Configuration ---
-    const contentRight = canvas.width - rightMargin - 20; 
+    // --- 6. Top Header Info (White Space) ---
     const dateObj = new Date();
     const dateStr = `${dateObj.getDate()}/${dateObj.getMonth()+1}/${dateObj.getFullYear()}`;
     const timeStr = `${dateObj.getHours()}:${dateObj.getMinutes().toString().padStart(2,'0')}`;
 
-    // --- A. Top Left Info (Date/Time/Location) ---
+    // A. Left Side: Date/Time/Location
     ctx.textAlign = 'left';
     ctx.font = 'bold 24px Segoe UI';
-    ctx.fillStyle = '#2980b9'; // Soft Blue
-    
-    // Positioned in the top white margin area
+    ctx.fillStyle = '#2980b9'; // Blue
     ctx.fillText(`תאריך: ${dateStr}`, 40, 50);
-    ctx.fillText(`שעה: ${timeStr}`, 40, 85);
-    ctx.fillText(`מיקום: ${location}`, 40, 120);
+    ctx.fillText(`שעה: ${timeStr}`, 40, 90);
+    ctx.fillText(`מיקום: ${location}`, 40, 130);
 
-    // --- B. Top Right Stats ---
+    // B. Right Side: Stats (Matzan/Nochachim/Hasrim)
     ctx.textAlign = 'right';
-    let currentLineY = topMargin + rowHeight - 12; // Start on first line
+    const statsX = canvas.width - rightMargin - 20;
 
-    // Line 1: Total
-    ctx.font = 'bold 28px Segoe UI';
+    // Matzan
     ctx.fillStyle = '#2d3436'; 
-    ctx.fillText(`מצן: ${totalCount}`, contentRight, currentLineY);
+    ctx.fillText(`מצן: ${totalCount}`, statsX, 50);
     
-    // Line 2: Present
-    currentLineY += rowHeight;
+    // Present
     ctx.fillStyle = '#27ae60'; 
-    ctx.fillText(`נוכחים: ${presentCount}`, contentRight, currentLineY);
+    ctx.fillText(`נוכחים: ${presentCount}`, statsX, 90);
 
-    // Line 3: Missing
-    currentLineY += rowHeight;
+    // Missing
     ctx.fillStyle = '#c0392b'; 
-    ctx.fillText(`חסרים: ${missingCount}`, contentRight, currentLineY);
+    ctx.fillText(`חסרים: ${missingCount}`, statsX, 130);
 
-    // --- C. Column Headers ---
-    currentLineY += rowHeight * 1.5; // Gap before list
-    ctx.fillStyle = '#2d3436';
+    // --- 7. Notebook Content ---
+    const contentRight = canvas.width - rightMargin - 20;
+    let currentY = topMargin + rowHeight - 12; // First line Y position
+
+    // A. Column Headers (First Row)
+    ctx.textAlign = 'right';
     ctx.font = 'bold 28px Segoe UI';
+    ctx.fillStyle = '#2d3436';
     
-    // Draw Headers
-    ctx.fillText("שם", contentRight, currentLineY);
-    ctx.fillText("סיבה", contentRight - 350, currentLineY);
-    
-    // Underline headers
-    ctx.lineWidth = 2;
-    ctx.strokeStyle = '#2d3436';
-    ctx.beginPath();
-    ctx.moveTo(contentRight, currentLineY + 5);
-    ctx.lineTo(contentRight - 40, currentLineY + 5);
-    ctx.moveTo(contentRight - 350, currentLineY + 5);
-    ctx.lineTo(contentRight - 410, currentLineY + 5);
-    ctx.stroke();
+    ctx.fillText("שם", contentRight, currentY);
+    ctx.fillText("סיבה", contentRight - 350, currentY);
 
-    // --- D. The List ---
+    // B. The List
     ctx.font = '26px Segoe UI';
     missingList.forEach((p) => {
-        currentLineY += rowHeight;
+        currentY += rowHeight;
         
         // Name
-        ctx.fillStyle = '#2d3436'; 
         ctx.textAlign = 'right';
-        ctx.fillText(p.name, contentRight, currentLineY - 10);
+        ctx.fillStyle = '#2d3436'; 
+        ctx.fillText(p.name, contentRight, currentY);
         
         // Reason
         if (p.reasons && p.reasons.length > 0) {
             ctx.fillStyle = '#7f8c8d'; // Grey
             let rText = p.reasons.join(", ");
             if (rText.length > 35) rText = rText.substring(0,35) + "...";
-            ctx.fillText(rText, contentRight - 350, currentLineY - 10);
+            ctx.fillText(rText, contentRight - 350, currentY);
         }
     });
 
-    // --- E. Footer: Author Info ---
-    // Position relatively, but ensure it's not at the very bottom
-    // We utilize the extra buffer we added to canvas height
-    const footerY = currentLineY + 150; 
-    
+    // --- 8. Footer: Reporter Info ---
+    // Positioned in the center of the bottom margin space
+    // The loop ensures we have 1 empty row, so we jump below linesEnd
+    const footerCenterY = linesEnd + (bottomMargin / 2) - 10;
+
     ctx.textAlign = 'center';
     ctx.fillStyle = '#2c3e50'; 
     ctx.font = 'bold 40px Segoe UI';
     
-    ctx.fillText(`מדווח: ${reporterName}`, canvas.width / 2, footerY);
+    ctx.fillText(`מדווח: ${reporterName}`, canvas.width / 2, footerCenterY);
     
     if (reporterId) {
         ctx.font = 'bold 32px Segoe UI';
         ctx.fillStyle = '#576574';
-        ctx.fillText(`ID: ${reporterId}`, canvas.width / 2, footerY + 50);
+        ctx.fillText(`ID: ${reporterId}`, canvas.width / 2, footerCenterY + 45);
     }
 
     // --- Download ---
@@ -426,7 +418,7 @@
     link.href = canvas.toDataURL();
     link.click();
   };
-
+  
 
   window.render = () => {
     const grid = document.getElementById("grid");
