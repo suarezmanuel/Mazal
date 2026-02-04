@@ -54,9 +54,7 @@
     box-shadow: 0 2px 5px rgba(0,0,0,0.05); position: relative; border: 3px solid transparent;
     transition: background 0.3s; display: flex; flex-direction: column; align-items: center;
   }
-  /* NEW: Green background for present people */
   .card.present { background: #d4edda; border-color: #c3e6cb; }
-  /* Selection border still applies */
   .card.selected { border-color: #28a745; border-width: 3px; }
 
   .card img { width: 85px; height: 85px; border-radius: 50%; object-fit: cover; background: #eee; margin-bottom: 8px; }
@@ -67,7 +65,54 @@
   .btn-delete { color: #d32f2f; background: #ffebee; border-color: #ffcdd2; }
   .btn-edit { color: #1976d2; background: #e3f2fd; border-color: #bbdefb; }
 
+  /* --- MODAL STYLES (Added these to fix your popup issue) --- */
   .hidden { display: none !important; }
+  
+  .modal-overlay {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0, 0, 0, 0.5); z-index: 1000;
+    display: flex; justify-content: center; align-items: center;
+  }
+
+  .modal-box {
+    background: white; width: 90%; max-width: 400px;
+    border-radius: 12px; box-shadow: 0 5px 20px rgba(0,0,0,0.2);
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+
+  .modal-header {
+    padding: 15px; background: #f8f9fa; border-bottom: 1px solid #eee;
+    display: flex; justify-content: space-between; align-items: center;
+    font-weight: bold; font-size: 18px;
+  }
+
+  .modal-body {
+    padding: 15px; display: flex; flex-direction: column; gap: 10px;
+    max-height: 60vh; overflow-y: auto;
+  }
+
+  .modal-footer {
+    padding: 15px; border-top: 1px solid #eee; background: #f8f9fa;
+    display: flex; gap: 10px;
+  }
+
+  .modal-input {
+    width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px;
+    box-sizing: border-box; font-size: 16px;
+  }
+  
+  .modal-label { font-weight: bold; font-size: 14px; margin-top: 10px; display: block; }
+
+  .modal-btn {
+    flex: 1; padding: 10px; background: #007bff; color: white;
+    border: none; border-radius: 6px; font-weight: bold; cursor: pointer;
+    text-align: center;
+  }
+  
+  .reason-item {
+    background: #e9ecef; padding: 8px 12px; border-radius: 6px;
+    border-right: 4px solid #007bff; margin-bottom: 5px; font-size: 14px;
+  }
 </style>
 </head>
 <body id="mainBody">
@@ -133,7 +178,7 @@
       <div class="modal-body" id="reasonsList"></div>
       <div class="modal-footer">
         <input id="newReasonInput" class="modal-input" placeholder="הוסף סיבה...">
-        <button class="modal-btn" style="width:auto" onclick="addReason()">+</button>
+        <button class="modal-btn" style="width:auto; flex:0 0 50px;" onclick="addReason()">+</button>
       </div>
     </div>
 </div>
@@ -221,51 +266,107 @@
     await batch.commit();
   };
 
+  // --- UPDATED REPORT LOGIC ---
   window.renderMissingImage = () => {
     const reporterName = prompt("שם המדווח:");
     if (!reporterName) return;
-    const reporterId = prompt("מזהה (ID):");
-    
+    const reporterId = prompt("מזהה (ID):") || "";
+    const location = prompt("מיקום:") || "לא צוין"; // New Input
+
+    // Filter people based on current view (Group vs All)
+    const targetPeople = (selectedGroupId === 'all') 
+        ? peopleData 
+        : peopleData.filter(p => p.groupId === selectedGroupId);
+
+    // Count votes
     const voteCounts = {};
-    peopleData.forEach(p => voteCounts[p.id] = 0);
-    votesData.forEach(v => v.targets.forEach(tId => { if(voteCounts.hasOwnProperty(tId)) voteCounts[tId]++; }));
-    
-    const missing = peopleData.filter(p => voteCounts[p.id] === 0);
+    targetPeople.forEach(p => voteCounts[p.id] = 0);
+    votesData.forEach(v => v.targets.forEach(tId => { 
+        if(voteCounts.hasOwnProperty(tId)) voteCounts[tId]++; 
+    }));
+
+    // Calculate Stats
+    const totalCount = targetPeople.length;
+    const presentList = targetPeople.filter(p => voteCounts[p.id] > 0);
+    const missingList = targetPeople.filter(p => voteCounts[p.id] === 0);
+    const presentCount = presentList.length;
+    const missingCount = missingList.length;
+
+    // Canvas Setup
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
+    
+    // Header Height + List Height
+    const headerHeight = 350; // Increased to fit new stats
     const rowHeight = 45;
     canvas.width = 900;
-    canvas.height = 250 + (missing.length * rowHeight);
+    canvas.height = headerHeight + (missingList.length * rowHeight);
 
+    // Background
     ctx.fillStyle = 'white';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     const now = new Date();
-    ctx.fillStyle = '#007bff';
-    ctx.font = 'bold 24px Segoe UI';
-    ctx.textAlign = 'left';
-    ctx.fillText(`${now.getDate()}/${now.getMonth()+1} | ${now.getHours()}:${now.getMinutes().toString().padStart(2,'0')}`, 50, 60);
+    const dateStr = `${now.getDate()}/${now.getMonth()+1}/${now.getFullYear()}`;
+    const timeStr = `${now.getHours()}:${now.getMinutes().toString().padStart(2,'0')}`;
 
+    // --- Draw Stats (Top Right) ---
     ctx.textAlign = 'right';
+    ctx.font = 'bold 30px Segoe UI';
+    
+    // Stats Lines
+    ctx.fillStyle = '#333';
+    ctx.fillText(`מצבת: ${totalCount}`, canvas.width - 50, 60);
+    
+    ctx.fillStyle = '#28a745'; // Green
+    ctx.fillText(`מצן: ${presentCount}`, canvas.width - 50, 100);
+    
+    ctx.fillStyle = '#d32f2f'; // Red
+    ctx.fillText(`חסרים: ${missingCount}`, canvas.width - 50, 140);
+
+    // --- Draw Info (Below Stats) ---
+    ctx.font = 'bold 24px Segoe UI';
+    ctx.fillStyle = '#007bff';
+    ctx.fillText(`תאריך: ${dateStr}`, canvas.width - 50, 200);
+    ctx.fillText(`שעה: ${timeStr}`, canvas.width - 50, 235);
+    ctx.fillText(`מיקום: ${location}`, canvas.width - 50, 270);
+
+    // --- Table Headers ---
     ctx.fillStyle = '#333';
     ctx.font = 'bold 26px Segoe UI';
-    ctx.fillText("שם", canvas.width - 150, 120);
-    ctx.fillText("סיבה", canvas.width - 550, 120);
+    // Draw underline
+    ctx.beginPath();
+    ctx.moveTo(50, 310);
+    ctx.lineTo(canvas.width - 50, 310);
+    ctx.stroke();
+
+    ctx.fillText("שם", canvas.width - 50, 300);
+    ctx.fillText("סיבה", canvas.width - 400, 300);
     
-    missing.forEach((p, i) => {
-        const y = 180 + (i * rowHeight);
+    // --- List Missing People ---
+    ctx.font = '24px Segoe UI';
+    missingList.forEach((p, i) => {
+        const y = headerHeight + (i * rowHeight);
         ctx.fillStyle = '#333';
-        ctx.fillText(p.name, canvas.width - 150, y);
+        ctx.textAlign = 'right';
+        ctx.fillText(p.name, canvas.width - 50, y);
+        
         ctx.fillStyle = '#666';
-        ctx.fillText(p.reasons?.join(", ") || "---", canvas.width - 550, y);
+        // Truncate reasons if too long
+        let reasonText = p.reasons?.join(", ") || "---";
+        if(reasonText.length > 40) reasonText = reasonText.substring(0, 40) + "...";
+        ctx.fillText(reasonText, canvas.width - 400, y);
     });
 
-    ctx.fillStyle = '#000';
-    ctx.font = 'italic 20px Segoe UI';
-    ctx.fillText(`מדווח: ${reporterName} | ID: ${reporterId}`, canvas.width - 50, canvas.height - 40);
+    // --- Footer ---
+    ctx.fillStyle = '#999';
+    ctx.font = 'italic 18px Segoe UI';
+    ctx.textAlign = 'left';
+    ctx.fillText(`מדווח: ${reporterName} ${reporterId ? '| ID: ' + reporterId : ''}`, 50, canvas.height - 20);
 
+    // Download
     const link = document.createElement('a');
-    link.download = `report.png`;
+    link.download = `report_${dateStr.replace(/\//g,'-')}.png`;
     link.href = canvas.toDataURL();
     link.click();
   };
@@ -298,7 +399,6 @@
       if (showOnlyAbsent && vCount > 0) return;
 
       const card = document.createElement("div");
-      // NEW: Added 'present' class if vCount > 0
       card.className = `card ${myVotes.includes(p.id) ? 'selected' : ''} ${vCount > 0 ? 'present' : ''}`;
       card.onclick = (e) => { if(!e.target.closest('button')) toggleVote(p.id); };
       
@@ -381,6 +481,8 @@
     if(!val) return;
     await updateDoc(doc(db, "people", activePersonId), { reasons: arrayUnion(val) });
     document.getElementById("newReasonInput").value = "";
+    // Wait slightly to refresh UI locally or just wait for snapshot
+    setTimeout(() => openReasonsModal(activePersonId), 300);
   };
 
   window.deleteUser = async (id) => { if(confirm("למחוק?")) await deleteDoc(doc(db, "people", id)); };
