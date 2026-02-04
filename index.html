@@ -252,6 +252,151 @@
     }
   };
 
+    window.renderMissingImage = () => {
+    const reporterName = prompt("שם המדווח:");
+    if (!reporterName) return;
+    const reporterId = prompt("מזהה (ID):") || "";
+    const location = prompt("מיקום:") || "לא צוין";
+
+    // --- 1. Filter Data ---
+    const targetPeople = (selectedGroupId === 'all') 
+        ? peopleData 
+        : peopleData.filter(p => p.groupId === selectedGroupId);
+
+    // --- 2. Calculate Stats ---
+    const voteCounts = {};
+    targetPeople.forEach(p => voteCounts[p.id] = 0);
+    votesData.forEach(v => v.targets.forEach(tId => { 
+        if(voteCounts.hasOwnProperty(tId)) voteCounts[tId]++; 
+    }));
+
+    const missingList = targetPeople.filter(p => voteCounts[p.id] === 0);
+    
+    // Stats
+    const totalCount = targetPeople.length;     // Total
+    const presentCount = targetPeople.length - missingList.length; // Present
+    const missingCount = missingList.length;    // Missing
+
+    // --- 3. Canvas Setup (Notebook Style) ---
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    
+    // Dimensions
+    const topMargin = 120; // Big space at top
+    const rightMargin = 100; // Big vertical space on right
+    const rowHeight = 50;  // Height of notebook lines
+    const headerRows = 6;  // Space for stats/date before list starts
+    
+    // Calculate total height based on content
+    const totalContentRows = headerRows + missingList.length + 4; // +4 for footer buffer
+    canvas.width = 1000;
+    canvas.height = Math.max(800, topMargin + (totalContentRows * rowHeight));
+
+    // --- 4. Background & Notebook Lines ---
+    // White Paper Background
+    ctx.fillStyle = '#fdfbf7'; 
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Horizontal Lines (Light Blue)
+    ctx.strokeStyle = '#a4c2f4'; 
+    ctx.lineWidth = 2;
+    for (let y = topMargin; y < canvas.height; y += rowHeight) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(canvas.width, y);
+        ctx.stroke();
+    }
+
+    // Vertical Margin Line (Soft Red/Pink)
+    ctx.strokeStyle = '#e0a6aa';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(canvas.width - rightMargin, 0);
+    ctx.lineTo(canvas.width - rightMargin, canvas.height);
+    ctx.stroke();
+
+    // --- 5. Text Configuration ---
+    const contentRight = canvas.width - rightMargin - 20; // Text starts slightly left of the red line
+    const dateObj = new Date();
+    const dateStr = `${dateObj.getDate()}/${dateObj.getMonth()+1}/${dateObj.getFullYear()}`;
+    const timeStr = `${dateObj.getHours()}:${dateObj.getMinutes().toString().padStart(2,'0')}`;
+
+    ctx.textAlign = 'right';
+    
+    // -- Stats Block (Soft Colors) --
+    let currentLineY = topMargin + rowHeight - 10; // Sit text on the line
+
+    // Line 1: Total (Matzan)
+    ctx.font = 'bold 28px Segoe UI';
+    ctx.fillStyle = '#2d3436'; // Soft Black
+    ctx.fillText(`מצן: ${totalCount}`, contentRight, currentLineY);
+    
+    // Line 2: Present (Nochachim)
+    currentLineY += rowHeight;
+    ctx.fillStyle = '#27ae60'; // Soft Green (Not neon)
+    ctx.fillText(`נוכחים: ${presentCount}`, contentRight, currentLineY);
+
+    // Line 3: Missing (Hasrim)
+    currentLineY += rowHeight;
+    ctx.fillStyle = '#c0392b'; // Soft Brick Red
+    ctx.fillText(`חסרים: ${targetPeople.length - presentCount}`, contentRight, currentLineY);
+
+    // -- Info Block --
+    currentLineY += rowHeight;
+    ctx.fillStyle = '#2980b9'; // Soft Blue
+    ctx.fillText(`תאריך: ${dateStr} | שעה: ${timeStr}`, contentRight, currentLineY);
+    
+    currentLineY += rowHeight;
+    ctx.fillText(`מיקום: ${location}`, contentRight, currentLineY);
+
+    // -- Headers for List --
+    currentLineY += rowHeight + 10; // Add a little gap
+    ctx.fillStyle = '#2d3436';
+    ctx.font = 'bold 30px Segoe UI';
+    ctx.fillText("רשימת חסרים:", contentRight, currentLineY);
+    
+    // -- The List --
+    ctx.font = '26px Segoe UI';
+    missingList.forEach((p) => {
+        currentLineY += rowHeight;
+        
+        // Name
+        ctx.fillStyle = '#2d3436'; // Dark Grey
+        ctx.textAlign = 'right';
+        ctx.fillText(p.name, contentRight, currentLineY - 10);
+        
+        // Reason (if exists) - Drawn in a softer color to the left
+        if (p.reasons && p.reasons.length > 0) {
+            ctx.fillStyle = '#7f8c8d'; // Grey
+            let rText = p.reasons.join(", ");
+            if (rText.length > 35) rText = rText.substring(0,35) + "...";
+            ctx.fillText(`(${rText})`, contentRight - 300, currentLineY - 10);
+        }
+    });
+
+    // --- 6. Footer: Author Info (Big & Clear) ---
+    const footerY = currentLineY + (rowHeight * 3);
+    
+    ctx.fillStyle = '#2c3e50'; // Dark Blue/Grey
+    ctx.font = 'bold 40px Segoe UI'; // Much Bigger
+    ctx.textAlign = 'center';
+    
+    // Draw a box or line for emphasis (Optional, keeps it clean)
+    ctx.fillText(`מדווח: ${reporterName}`, canvas.width / 2, footerY);
+    
+    if (reporterId) {
+        ctx.font = 'bold 32px Segoe UI';
+        ctx.fillStyle = '#576574';
+        ctx.fillText(`ID: ${reporterId}`, canvas.width / 2, footerY + 50);
+    }
+
+    // --- 7. Download ---
+    const link = document.createElement('a');
+    link.download = `notebook_report_${dateStr.replace(/\//g,'-')}.png`;
+    link.href = canvas.toDataURL();
+    link.click();
+  };
+
   window.resetVotes = async () => {
     const isAll = selectedGroupId === 'all';
     if (!confirm(isAll ? "איפוס כל המערכת?" : "איפוס קבוצה זו?")) return;
@@ -267,109 +412,7 @@
   };
 
   // --- UPDATED REPORT LOGIC ---
-  window.renderMissingImage = () => {
-    const reporterName = prompt("שם המדווח:");
-    if (!reporterName) return;
-    const reporterId = prompt("מזהה (ID):") || "";
-    const location = prompt("מיקום:") || "לא צוין"; // New Input
-
-    // Filter people based on current view (Group vs All)
-    const targetPeople = (selectedGroupId === 'all') 
-        ? peopleData 
-        : peopleData.filter(p => p.groupId === selectedGroupId);
-
-    // Count votes
-    const voteCounts = {};
-    targetPeople.forEach(p => voteCounts[p.id] = 0);
-    votesData.forEach(v => v.targets.forEach(tId => { 
-        if(voteCounts.hasOwnProperty(tId)) voteCounts[tId]++; 
-    }));
-
-    // Calculate Stats
-    const totalCount = targetPeople.length;
-    const presentList = targetPeople.filter(p => voteCounts[p.id] > 0);
-    const missingList = targetPeople.filter(p => voteCounts[p.id] === 0);
-    const presentCount = presentList.length;
-    const missingCount = missingList.length;
-
-    // Canvas Setup
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    
-    // Header Height + List Height
-    const headerHeight = 350; // Increased to fit new stats
-    const rowHeight = 45;
-    canvas.width = 900;
-    canvas.height = headerHeight + (missingList.length * rowHeight);
-
-    // Background
-    ctx.fillStyle = 'white';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    const now = new Date();
-    const dateStr = `${now.getDate()}/${now.getMonth()+1}/${now.getFullYear()}`;
-    const timeStr = `${now.getHours()}:${now.getMinutes().toString().padStart(2,'0')}`;
-
-    // --- Draw Stats (Top Right) ---
-    ctx.textAlign = 'right';
-    ctx.font = 'bold 30px Segoe UI';
-    
-    // Stats Lines
-    ctx.fillStyle = '#333';
-    ctx.fillText(`מצבת: ${totalCount}`, canvas.width - 50, 60);
-    
-    ctx.fillStyle = '#28a745'; // Green
-    ctx.fillText(`מצן: ${presentCount}`, canvas.width - 50, 100);
-    
-    ctx.fillStyle = '#d32f2f'; // Red
-    ctx.fillText(`חסרים: ${missingCount}`, canvas.width - 50, 140);
-
-    // --- Draw Info (Below Stats) ---
-    ctx.font = 'bold 24px Segoe UI';
-    ctx.fillStyle = '#007bff';
-    ctx.fillText(`תאריך: ${dateStr}`, canvas.width - 50, 200);
-    ctx.fillText(`שעה: ${timeStr}`, canvas.width - 50, 235);
-    ctx.fillText(`מיקום: ${location}`, canvas.width - 50, 270);
-
-    // --- Table Headers ---
-    ctx.fillStyle = '#333';
-    ctx.font = 'bold 26px Segoe UI';
-    // Draw underline
-    ctx.beginPath();
-    ctx.moveTo(50, 310);
-    ctx.lineTo(canvas.width - 50, 310);
-    ctx.stroke();
-
-    ctx.fillText("שם", canvas.width - 50, 300);
-    ctx.fillText("סיבה", canvas.width - 400, 300);
-    
-    // --- List Missing People ---
-    ctx.font = '24px Segoe UI';
-    missingList.forEach((p, i) => {
-        const y = headerHeight + (i * rowHeight);
-        ctx.fillStyle = '#333';
-        ctx.textAlign = 'right';
-        ctx.fillText(p.name, canvas.width - 50, y);
-        
-        ctx.fillStyle = '#666';
-        // Truncate reasons if too long
-        let reasonText = p.reasons?.join(", ") || "---";
-        if(reasonText.length > 40) reasonText = reasonText.substring(0, 40) + "...";
-        ctx.fillText(reasonText, canvas.width - 400, y);
-    });
-
-    // --- Footer ---
-    ctx.fillStyle = '#999';
-    ctx.font = 'italic 18px Segoe UI';
-    ctx.textAlign = 'left';
-    ctx.fillText(`מדווח: ${reporterName} ${reporterId ? '| ID: ' + reporterId : ''}`, 50, canvas.height - 20);
-
-    // Download
-    const link = document.createElement('a');
-    link.download = `report_${dateStr.replace(/\//g,'-')}.png`;
-    link.href = canvas.toDataURL();
-    link.click();
-  };
+  
 
   window.render = () => {
     const grid = document.getElementById("grid");
